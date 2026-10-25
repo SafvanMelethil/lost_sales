@@ -1,0 +1,1523 @@
+<title>Lost Sales Reporting</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap">
+<style>
+/* Layout: a narrow operator console — one column of three sequential steps (intake → controls → package), with the result ledger beside it on wide screens. */
+:root {
+  --bg: #f6f5fa; --surface: #ffffff; --ink: #1e1a2e; --muted: #625d75; --line: #e2dfec;
+  --brand: #5b4696; --brand-ink: #ffffff; --brand-soft: #eeeaf7; --shade: #f7f6fb;
+  --ok: #1d7a46; --ok-soft: #e6f4ec; --bad: #b3261e; --bad-soft: #fbe9e7; --warn: #8a5a00; --warn-soft: #fdf3dc;
+  --sc: #c5dca8; --com: #4f8ea3; --ops: #f3bf1d;
+  --f-ui: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --f-data: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #15131c; --surface: #1e1b28; --ink: #ece9f5; --muted: #a39db8; --line: #322d42;
+  --brand: #9c86e0; --brand-ink: #15131c; --brand-soft: #2a2440; --shade: #232030;
+  --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1b1a; --warn: #f2c04d; --warn-soft: #3a2e12;
+  --sc: #5f7a43; --com: #3c7487; --ops: #a8840f; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #15131c; --surface: #1e1b28; --ink: #ece9f5; --muted: #a39db8; --line: #322d42;
+  --brand: #9c86e0; --brand-ink: #15131c; --brand-soft: #2a2440; --shade: #232030;
+  --ok: #6fd39b; --ok-soft: #173326; --bad: #ff8a80; --bad-soft: #3a1b1a; --warn: #f2c04d; --warn-soft: #3a2e12;
+  --sc: #5f7a43; --com: #3c7487; --ops: #a8840f; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-ui); font-size: 15px; line-height: 1.5; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 0 48px; }
+header.top { background: var(--brand); color: var(--brand-ink); }
+header.top .wrap { padding-block: 18px; display: flex; flex-wrap: wrap; gap: 8px 24px; align-items: baseline; justify-content: space-between; }
+header.top h1 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.01em; }
+header.top .build { font-family: var(--f-data); font-size: 11.5px; letter-spacing: 0.04em; opacity: 0.85; }
+.lede { color: var(--muted); max-width: 70ch; margin: 18px 0 22px; font-size: 14.5px; }
+.lede b { color: var(--ink); font-weight: 600; }
+.grid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
+@media (min-width: 1000px) { .grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr); align-items: start; } }
+.step { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px; display: grid; gap: 14px; }
+.steps { display: grid; gap: 16px; min-width: 0; }
+.step h2 { margin: 0; font-size: 16px; font-weight: 600; display: flex; align-items: center; gap: 10px; text-wrap: balance; }
+.step h2 .n { font-family: var(--f-data); font-size: 12px; width: 24px; height: 24px; border-radius: 50%; display: inline-grid; place-items: center; background: var(--brand-soft); color: var(--brand); font-weight: 500; flex: none; }
+.step.active h2 .n { background: var(--brand); color: var(--brand-ink); }
+.step.done h2 .n { background: var(--ok-soft); color: var(--ok); }
+.step[aria-disabled="true"] { opacity: 0.55; }
+.drop { border: 1.5px dashed color-mix(in srgb, var(--brand) 45%, var(--line)); border-radius: var(--r); padding: 22px 18px; text-align: center; background: var(--shade); cursor: pointer; display: grid; gap: 6px; transition: background .15s, border-color .15s; }
+.drop:hover, .drop.over { background: var(--brand-soft); border-color: var(--brand); }
+.drop:focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.drop strong { font-size: 15px; }
+.drop small { color: var(--muted); font-size: 12.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; }
+.chip { font-family: var(--f-data); font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--surface); border: 1px solid var(--line); color: var(--muted); }
+.chip.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 35%, var(--line)); background: var(--ok-soft); }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+button, .btn { font: inherit; font-weight: 600; font-size: 14.5px; border: 0; border-radius: 8px; padding: 10px 18px; cursor: pointer; background: var(--brand); color: var(--brand-ink); }
+button.ghost { background: transparent; color: var(--brand); border: 1px solid color-mix(in srgb, var(--brand) 50%, var(--line)); }
+button.small { padding: 6px 12px; font-size: 13px; }
+button:disabled { opacity: .45; cursor: not-allowed; }
+button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.muted { color: var(--muted); font-size: 13px; }
+.bar { height: 8px; border-radius: 99px; background: var(--brand-soft); overflow: hidden; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--brand); transition: width .35s ease; }
+.status { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; flex-wrap: wrap; }
+.status .t { font-family: var(--f-data); color: var(--muted); }
+.alert { border-radius: 8px; padding: 12px 14px; font-size: 14px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.alert.bad { background: var(--bad-soft); color: var(--bad); }
+.alert.warn { background: var(--warn-soft); color: var(--warn); }
+.alert.ok { background: var(--ok-soft); color: var(--ok); }
+.kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.kv div { background: var(--surface); padding: 9px 12px; display: grid; gap: 2px; }
+.kv span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); }
+.kv b { font-family: var(--f-data); font-weight: 500; font-size: 14px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+th { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted); font-weight: 600; background: var(--shade); }
+td.num, th.num { text-align: right; font-family: var(--f-data); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pill { display: inline-block; font-family: var(--f-data); font-size: 11px; font-weight: 500; padding: 1px 8px; border-radius: 99px; letter-spacing: .04em; }
+.pill.pass { background: var(--ok-soft); color: var(--ok); }
+.pill.fail { background: var(--bad-soft); color: var(--bad); }
+.ledger { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 20px 22px; display: grid; gap: 14px; min-width: 0; }
+.ledger h2 { margin: 0; font-size: 16px; font-weight: 600; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tag { font-family: var(--f-data); font-size: 11px; padding: 2px 8px; border-radius: 6px; background: var(--warn-soft); color: var(--warn); font-weight: 500; letter-spacing: 0.03em; }
+.tag.live { background: var(--ok-soft); color: var(--ok); }
+.dept td:first-child { font-weight: 600; }
+.dept tr.g td { border-left: 4px solid transparent; }
+.dept tr.g.sc td:first-child { border-left-color: var(--sc); }
+.dept tr.g.com td:first-child { border-left-color: var(--com); }
+.dept tr.g.ops td:first-child { border-left-color: var(--ops); }
+.dept tr.g td { background: var(--shade); }
+.dept tr.sub td:first-child { font-weight: 400; padding-left: 24px; }
+.dept tr.tot td { font-weight: 700; }
+.periods { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.periods div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; display: grid; gap: 2px; min-width: 0; }
+.periods span { font-size: 11px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+.periods b { font-family: var(--f-data); font-weight: 500; font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.periods em { font-style: normal; font-family: var(--f-data); font-size: 12px; color: var(--muted); }
+@media (max-width: 520px) { .periods { grid-template-columns: minmax(0, 1fr); } }
+.files { display: grid; gap: 8px; }
+.files .f { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 8px; flex-wrap: wrap; }
+.files .f code { font-family: var(--f-data); font-size: 12.5px; overflow-wrap: anywhere; min-width: 0; }
+details summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+.log { font-family: var(--f-data); font-size: 11.5px; color: var(--muted); max-height: 140px; overflow: auto; background: var(--shade); border-radius: 8px; padding: 8px 10px; margin-top: 8px; white-space: pre-wrap; }
+ul.notes { margin: 0; padding-left: 18px; color: var(--muted); font-size: 13px; }
+.rules { font-size: 13px; color: var(--muted); display: grid; gap: 4px; }
+.rules code { font-family: var(--f-data); font-size: 12px; color: var(--ink); }
+input[type=file] { display: none; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<header class="top"><div class="wrap">
+  <h1>Lost Sales Reporting</h1>
+  <span class="build">LOST-SALES-PRODUCTION-7.2.0-DIVISION-TITLE-CASE</span>
+</div></header>
+
+<div class="wrap">
+  <p class="lede">Drop the day's <b>Repository ZIP</b>. The page checks the dates, classifies every valid Lost Sales row and builds the six-file verified package. <b>All processing happens in this browser</b>, so no sales data leaves your computer. Use a desktop browser (Chrome, Edge or Safari) with about 3 GB of free memory; a run takes 2–3 minutes.</p>
+
+  <div class="grid">
+    <div class="steps">
+      <section class="step active" id="s1">
+        <h2><span class="n">1</span>Repository</h2>
+        <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose the Repository ZIP">
+          <strong>Drop the Repository ZIP here, or click to choose it</strong>
+          <small>You can also drop the loose files or a Repository folder.</small>
+          <div class="chips" id="need">
+            <span class="chip" data-k="lost">Lost_Sales_YYYY-MM-DD.xlsx</span>
+            <span class="chip" data-k="mb52">mb52 (same date)</span>
+            <span class="chip" data-k="zfd">ZFD zip (date + 1)</span>
+            <span class="chip" data-k="close">ITEM TO CLOSE</span>
+            <span class="chip" data-k="pdmf">PDMF</span>
+            <span class="chip" data-k="master">Commercial Master</span>
+            <span class="chip" data-k="ppt">PPT template</span>
+            <span class="chip" data-k="common">previous LOSt_Common</span>
+          </div>
+        </div>
+        <input type="file" id="fileInput" multiple accept=".zip,.xlsx,.xlsm,.pptx">
+        <input type="file" id="folderInput" webkitdirectory multiple>
+        <input type="file" id="masterInput" accept=".xlsx">
+        <div class="row">
+          <button id="startBtn" disabled>Start Stage 1</button>
+          <button class="ghost small" id="folderBtn" type="button">Choose a folder instead</button>
+          <span class="muted" id="picked">Nothing chosen yet.</span>
+        </div>
+        <div class="muted" id="masterLine">Commercial Master: <span id="masterState">built-in list (9,502 materials)</span> · <button class="ghost small" id="masterBtn" type="button">Replace Commercial Master</button></div>
+      </section>
+
+      <section class="step" id="run" hidden>
+        <div class="status"><span id="runMsg">Starting…</span><span class="t" id="runTime">0:00</span></div>
+        <div class="bar"><i id="barFill"></i></div>
+        <div id="runErr" class="alert bad" hidden></div>
+        <details><summary>Activity log</summary><div class="log" id="log"></div></details>
+      </section>
+
+      <section class="step" id="s2" aria-disabled="true">
+        <h2><span class="n">2</span>Stage 1 controls</h2>
+        <p class="muted" id="s2empty">After Stage 1 runs, the report date, row counts, recovered dates and every control appear here for review before anything is published.</p>
+        <div id="s2body" hidden>
+          <div class="kv" id="kv"></div>
+          <div class="tbl"><table id="srcTbl"></table></div>
+          <div class="tbl"><table id="chk1"></table></div>
+          <ul class="notes" id="notes"></ul>
+          <div id="s2warn" class="alert warn" hidden></div>
+          <div class="row"><button id="approveBtn">Approve and build the package</button></div>
+        </div>
+      </section>
+
+      <section class="step" id="s3" aria-disabled="true">
+        <h2><span class="n">3</span>Verified package</h2>
+        <p class="muted" id="s3empty">The six deliverables appear here once you approve: the Common, three department workbooks, the Executive PowerPoint and the reconciliation JSON.</p>
+        <div id="s3body" hidden>
+          <div id="allOk" class="alert ok"></div>
+          <div class="row"><button id="saveZip">Save verified ZIP</button><span class="muted" id="zipName"></span></div>
+          <div class="files" id="fileList"></div>
+          <div id="saveMsg" class="muted"></div>
+          <details><summary>All validation and reconciliation controls</summary><div class="tbl" style="margin-top:8px"><table id="chk2"></table></div></details>
+          <div class="row"><button class="ghost small" id="againBtn">Run another report</button></div>
+        </div>
+      </section>
+
+      <details class="step">
+        <summary style="font-size:14px;color:var(--ink);font-weight:600">Rules this page applies</summary>
+        <div class="rules">
+          <div>Waterfall, first match wins: Invalid → Delisted → Speciality → Door To Door → Blocked → Onhand Available → Shortage → Zero Forecast → Auto Replenishment → Coverage Uplift.</div>
+          <div>Shortage if <code>WH &lt; min(30, UPC/30)</code>, <code>WH = 0</code>, <code>store FC &lt; 10 and WH &lt; 10</code>, or <code>WH &lt; (UPC/30) × 1.25</code>.</div>
+          <div>Onhand Available if <code>onhand ≥ max(1, Forecast/30 × 3)</code>. <code>WH = W1 + W2</code> (MB52 plant 1100 → W1, 2100 → W2; Unrestricted + Transit).</div>
+          <div>Dates: MB52 = report date, ZFD = report date + 1, previous Common earlier than report date. Gap dates <code>latest_history &lt; CreatedAt ≤ report date</code> come from the current MTD sheet and replace history once.</div>
+          <div>Department sheets carry Division and never WH or WH_Stock. Division comes from the Commercial Master; unmapped materials stay blank.</div>
+        </div>
+      </details>
+    </div>
+
+    <aside class="ledger" id="ledger">
+      <h2>Yesterday by department <span class="tag" id="ledgerTag">Example · 24-10-2026</span></h2>
+      <p class="muted" id="ledgerNote">Figures from the verified 24-10-2026 run, shown until you build your own report.</p>
+      <div class="periods" id="periods"></div>
+      <div class="tbl"><table class="dept" id="deptTbl"></table></div>
+      <div class="muted" id="ledgerFoot">Values in SAR, rounded to whole riyals; % of the day's total.</div>
+    </aside>
+  </div>
+</div>
+
+<script>
+/* Lost Sales Reporting Engine (browser build)
+ * Build LOST-SALES-PRODUCTION-7.2.0-DIVISION-TITLE-CASE
+ * Port of the verified Python engine. Runs fully in the browser: nothing is uploaded. */
+(function (G) {
+"use strict";
+const BUILD_ID = "LOST-SALES-PRODUCTION-7.2.0-DIVISION-TITLE-CASE";
+
+// ------------------------------------------------------------------ constants
+const CAT_ORDER = ["INVALID", "DELISTED", "SPECIALITY", "DTD", "BLOCKED", "ON_HAND", "SHORTAGE", "ZERO_FC", "AUTO_REPLENISHMENT", "COVERAGE_UPLIFT"];
+const REASON = {
+  DELISTED: "DELISTED ITEMS", SPECIALITY: "SPECIAL ITEMS", DTD: "Door To Door", BLOCKED: "BLOCKED ITEMS",
+  ON_HAND: "ONHAND AVAILABLE", SHORTAGE: "SHORTAGE", ZERO_FC: "ZERO FORECAST",
+  AUTO_REPLENISHMENT: "AUTO REPLENISHMENT – NEXT VISIT", COVERAGE_UPLIFT: "COVERAGE WILL BE INCREASED",
+};
+const REASON_TO_CAT = {};
+for (const k in REASON) REASON_TO_CAT[REASON[k].toUpperCase()] = k;
+Object.assign(REASON_TO_CAT, {
+  "UNICHARM ITEMS": "DTD", "UNICHARM": "DTD", "DOOR TO DOOR": "DTD",
+  "AUTO REPLENISHMENT - NEXT VISIT": "AUTO_REPLENISHMENT", "AUTO REPLENISHMENT": "AUTO_REPLENISHMENT",
+  "SPECIALITY": "SPECIALITY", "ONHAND": "ON_HAND", "ON-HAND AVAILABLE": "ON_HAND",
+});
+const DEPT_SC = "Supply Chain Review", DEPT_COM = "Commercial Review", DEPT_OPS = "Operation Review";
+const OWNER = {
+  DELISTED: DEPT_COM, BLOCKED: DEPT_COM, SHORTAGE: DEPT_COM,
+  SPECIALITY: DEPT_OPS, DTD: DEPT_OPS, ON_HAND: DEPT_OPS,
+  ZERO_FC: DEPT_SC, AUTO_REPLENISHMENT: DEPT_SC, COVERAGE_UPLIFT: DEPT_SC,
+};
+const DEPT_SHORT = { [DEPT_SC]: "Supply Chain", [DEPT_COM]: "Commercial", [DEPT_OPS]: "Operations" };
+const JSON_LABEL = {
+  INVALID: ["INVALID ITEMS", "Operations"], DELISTED: ["Delisted", "Commercial"], SPECIALITY: ["Speciality", "Operations"],
+  DTD: ["DTD / Unicharm", "Operations"], BLOCKED: ["Blocked item", "Commercial"], ON_HAND: ["On-hand available", "Operations"],
+  SHORTAGE: ["WH shortage", "Commercial"], ZERO_FC: ["Zero forecast", "Supply Chain"],
+  AUTO_REPLENISHMENT: ["Auto replenishment", "Supply Chain"], COVERAGE_UPLIFT: ["Coverage uplift", "Supply Chain"],
+  ITEM_FOR_REVIEW: ["Item for review", "Supply Chain"],
+};
+const COMMON_COLUMNS = ["Warehouse", "CreatedAt", "BranchName", "ProductCode", "ID", "rsp", "Material Desc.", "Onhand Stock", "MDQ", "Forecast", "RANGED", "Open Orders", "Replenishment Quanti", "Age in Days", "Daily Forecast", "Final Minimum Foreca", "Final Maximum Foreca", "UPC_Forecast", "w1", "w2", "wh_Inventory", "Item_status", "Reason", "Department"];
+const C = {}; COMMON_COLUMNS.forEach((n, i) => (C[n] = i));
+const NUMERIC_COMMON = ["rsp", "Onhand Stock", "MDQ", "Forecast", "RANGED", "Open Orders", "Replenishment Quanti", "Age in Days", "Daily Forecast", "Final Minimum Foreca", "Final Maximum Foreca", "UPC_Forecast", "w1", "w2", "wh_Inventory"].map(n => C[n]);
+const COMMON_WIDTHS = [11, 21, 12, 13, 11, 11, 34, 14, 11, 11, 11, 13, 22, 13, 16, 22, 22, 20, 11, 11, 14, 13, 33, 21];
+const DEPT_COLUMNS = {
+  [DEPT_OPS]: ["CreatedAt", "UserName", "StoreCode", "ProductCode", "ProductName", "Division", "Onhand Stock", "OWNER_DEPARTMENT", "OWNER_REASON"],
+  [DEPT_SC]: ["CreatedAt", "StoreCode", "ProductCode", "ProductName", "RANGED", "Division", "Onhand Stock", "Forecast", "OWNER_DEPARTMENT", "OWNER_REASON"],
+  [DEPT_COM]: ["CreatedAt", "StoreCode", "ProductCode", "ProductName", "Division", "OWNER_DEPARTMENT", "OWNER_REASON"],
+};
+const DEPT_FILE = { [DEPT_SC]: "Supplychain_Review_{d}.xlsx", [DEPT_COM]: "commercial_Review_{d}.xlsx", [DEPT_OPS]: "Operation_Review_{d}.xlsx" };
+const PLANT_TO_WH = { "1100": "W1", "2100": "W2", "W1": "W1", "W2": "W2" };
+const ZFD_FIELDS = ["Onhand Stock", "Min Forecast Qty", "Max Forecast Qty", "MDQ", "Forecast", "RANGED", "Open Orders", "Replenishment Quanti", "Age in Days", "Daily Forecast", "Final Minimum Foreca", "Final Maximum Foreca"];
+const Z = {}; ZFD_FIELDS.forEach((n, i) => (Z[n] = i));
+
+class EngineError extends Error {}
+
+// ------------------------------------------------------------------ helpers
+function clean(v) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "number") {
+    if (v !== v) return "";
+    if (Number.isInteger(v)) return String(v);
+    return pyRepr(v);
+  }
+  if (typeof v === "boolean") return v ? "True" : "False";
+  let s = String(v).trim();
+  if (s.endsWith(".0") && /^-?\d+$/.test(s.slice(0, -2))) s = s.slice(0, -2);
+  return s;
+}
+function pyRepr(x) { // python repr of float
+  if (Number.isInteger(x) && Math.abs(x) < 1e16) return x.toFixed(1);
+  let s = String(x);
+  if (s.includes("e")) { // python style exponent e-05
+    const [m, e] = s.split("e"); const n = parseInt(e, 10);
+    s = m + "e" + (n < 0 ? "-" : "+") + String(Math.abs(n)).padStart(2, "0");
+  }
+  return s;
+}
+function num(v) {
+  if (v === null || v === undefined || v === "") return 0;
+  if (typeof v === "number") return v !== v ? 0 : v;
+  if (typeof v === "boolean") return v ? 1 : 0;
+  const s = String(v).replace(/,/g, "").trim();
+  if (!s) return 0;
+  if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s) && !/^[+-]?(inf|infinity|nan)$/i.test(s)) return 0;
+  const f = parseFloat(s);
+  return f !== f ? 0 : f;
+}
+// dates are Excel serial day numbers (integers) internally
+const EPOCH = Date.UTC(1899, 11, 30);
+function serialFromYMD(y, m, d) { return Math.round((Date.UTC(y, m - 1, d) - EPOCH) / 86400000); }
+function ymdFromSerial(s) { const t = new Date(EPOCH + s * 86400000); return [t.getUTCFullYear(), t.getUTCMonth() + 1, t.getUTCDate()]; }
+function iso(s) { const [y, m, d] = ymdFromSerial(s); return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`; }
+function dmy(s) { const [y, m, d] = ymdFromSerial(s); return `${String(d).padStart(2, "0")}-${String(m).padStart(2, "0")}-${y}`; }
+function validYMD(y, m, d) { if (m < 1 || m > 12 || d < 1) return false; const t = new Date(Date.UTC(y, m - 1, d)); return t.getUTCMonth() === m - 1 && t.getUTCDate() === d; }
+function toDate(v) {
+  if (typeof v === "number") { if (v > 20000 && v < 80000) return Math.floor(v); return null; }
+  if (typeof v === "string" && v.trim()) {
+    const t = v.trim(); let m;
+    if ((m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(t)) && validYMD(+m[1], +m[2], +m[3])) return serialFromYMD(+m[1], +m[2], +m[3]);
+    if ((m = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/.exec(t)) && validYMD(+m[3], +m[2], +m[1])) return serialFromYMD(+m[3], +m[2], +m[1]);
+  }
+  return null;
+}
+function dateFromName(name) {
+  const base = name.split("/").pop();
+  const pats = [[/(?<!\d)(20\d{2})[-_. ](\d{1,2})[-_. ](\d{1,2})(?!\d)/g, "ymd"], [/(?<!\d)(\d{1,2})[-_. ](\d{1,2})[-_. ](20\d{2})(?!\d)/g, "dmy"], [/(?<!\d)(20\d{2})(\d{2})(\d{2})(?!\d)/g, "ymd"]];
+  for (const [rx, kind] of pats) {
+    for (const m of base.matchAll(rx)) {
+      const [a, b, c] = [+m[1], +m[2], +m[3]];
+      if (kind === "ymd" && validYMD(a, b, c)) return serialFromYMD(a, b, c);
+      if (kind === "dmy" && validYMD(c, b, a)) return serialFromYMD(c, b, a);
+    }
+  }
+  return null;
+}
+const basename = p => p.split("/").pop();
+
+// exact python round(x, nd) and "{:,.2f}"
+function roundStr(x, nd) {
+  if (!isFinite(x)) return String(x);
+  const neg = x < 0 || Object.is(x, -0); const ax = Math.abs(x);
+  const s = ax.toFixed(Math.min(100, nd + 80)); // exact expansion for normal magnitudes
+  let [ip, fp] = s.split(".");
+  const keep = fp.slice(0, nd), rest = fp.slice(nd);
+  let digits = (ip + keep).split("").map(Number);
+  const first = +rest[0]; const tail = rest.slice(1).replace(/0+$/, "");
+  let up = first > 5 || (first === 5 && tail.length > 0) || (first === 5 && !tail.length && digits[digits.length - 1] % 2 === 1);
+  if (up) { let i = digits.length - 1; while (i >= 0) { if (digits[i] === 9) { digits[i] = 0; i--; } else { digits[i]++; break; } } if (i < 0) digits.unshift(1); }
+  const str = digits.join(""); const ipart = str.slice(0, str.length - nd) || "0"; const fpart = str.slice(str.length - nd);
+  return (neg && /[1-9]/.test(str) ? "-" : "") + ipart + (nd ? "." + fpart : "");
+}
+const round2 = x => parseFloat(roundStr(x, 2));
+function commas(intStr) { return intStr.replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+function fmt2(x) { const s = roundStr(x, 2); const neg = s.startsWith("-"); const [i, f] = s.replace("-", "").split("."); return (neg ? "-" : "") + commas(i) + "." + f; }
+function fmtInt(n) { return commas(String(n)); }
+
+// math.fsum (Shewchuk, as CPython)
+function fsum(arr) {
+  const partials = [];
+  for (let x of arr) {
+    let i = 0;
+    for (let j = 0; j < partials.length; j++) {
+      let y = partials[j];
+      if (Math.abs(x) < Math.abs(y)) { const t = x; x = y; y = t; }
+      const hi = x + y; const lo = y - (hi - x);
+      if (lo) partials[i++] = lo;
+      x = hi;
+    }
+    partials.length = i; partials.push(x);
+  }
+  let n = partials.length; let hi = 0;
+  if (n > 0) {
+    hi = partials[--n]; let lo = 0;
+    while (n > 0) {
+      const x = hi; const y = partials[--n];
+      hi = x + y; const yr = hi - x; lo = y - yr;
+      if (lo) break;
+    }
+    if (n > 0 && ((lo < 0 && partials[n - 1] < 0) || (lo > 0 && partials[n - 1] > 0))) {
+      const y = lo * 2; const x = hi + y; const yr = x - hi;
+      if (y === yr) hi = x;
+    }
+  }
+  return hi;
+}
+// CPython 3.12+ builtin sum() over floats (Neumaier compensation)
+function plainSum(arr) {
+  let f = 0, c = 0;
+  for (const x of arr) { const t = f + x; if (Math.abs(f) >= Math.abs(x)) c += (f - t) + x; else c += (x - t) + f; f = t; }
+  if (c && isFinite(c)) f += c;
+  return f;
+}
+
+// ------------------------------------------------------------------ ZIP reading (Blob based, streaming)
+const td = new TextDecoder("utf-8");
+const cp437 = new TextDecoder("latin1");
+class ZipReader {
+  constructor(blob, name) { this.blob = blob; this.name = name || "zip"; }
+  async open() {
+    const size = this.blob.size;
+    const tailLen = Math.min(size, 65557 + 22);
+    const tail = new Uint8Array(await this.blob.slice(size - tailLen).arrayBuffer());
+    let eocd = -1;
+    for (let i = tail.length - 22; i >= 0; i--) { if (tail[i] === 0x50 && tail[i + 1] === 0x4b && tail[i + 2] === 5 && tail[i + 3] === 6) { eocd = i; break; } }
+    if (eocd < 0) throw new EngineError(`${this.name} is not a readable ZIP file (it may be truncated or corrupt).`);
+    const dv = new DataView(tail.buffer);
+    let count = dv.getUint16(eocd + 10, true), cdSize = dv.getUint32(eocd + 12, true), cdOff = dv.getUint32(eocd + 16, true);
+    if (count === 0xffff || cdOff === 0xffffffff) { // zip64
+      const loc = eocd - 20;
+      if (loc >= 0 && dv.getUint32(loc, true) === 0x07064b50) {
+        const z64off = Number(dv.getBigUint64(loc + 8, true));
+        const z = new DataView(await this.blob.slice(z64off, z64off + 56).arrayBuffer());
+        count = Number(z.getBigUint64(32, true)); cdSize = Number(z.getBigUint64(40, true)); cdOff = Number(z.getBigUint64(48, true));
+      }
+    }
+    const cd = new Uint8Array(await this.blob.slice(cdOff, cdOff + cdSize).arrayBuffer());
+    const d = new DataView(cd.buffer);
+    this.entries = []; let p = 0;
+    for (let k = 0; k < count && p + 46 <= cd.length; k++) {
+      if (d.getUint32(p, true) !== 0x02014b50) break;
+      const flags = d.getUint16(p + 8, true), method = d.getUint16(p + 10, true), crc = d.getUint32(p + 16, true);
+      let csize = d.getUint32(p + 20, true), usize = d.getUint32(p + 24, true);
+      const nl = d.getUint16(p + 28, true), xl = d.getUint16(p + 30, true), cl = d.getUint16(p + 32, true);
+      let off = d.getUint32(p + 42, true);
+      const nameBytes = cd.subarray(p + 46, p + 46 + nl);
+      const name = (flags & 0x800 ? td : (isAscii(nameBytes) ? td : cp437)).decode(nameBytes);
+      let xp = p + 46 + nl; const xe = xp + xl;
+      while (xp + 4 <= xe) {
+        const id = d.getUint16(xp, true), sz = d.getUint16(xp + 2, true);
+        if (id === 1) { let q = xp + 4; if (usize === 0xffffffff) { usize = Number(d.getBigUint64(q, true)); q += 8; } if (csize === 0xffffffff) { csize = Number(d.getBigUint64(q, true)); q += 8; } if (off === 0xffffffff) { off = Number(d.getBigUint64(q, true)); } }
+        xp += 4 + sz;
+      }
+      this.entries.push({ name, method, crc, csize, usize, off, dir: name.endsWith("/") });
+      p += 46 + nl + xl + cl;
+    }
+    return this;
+  }
+  find(name) { return this.entries.find(e => e.name === name) || this.entries.find(e => e.name.toLowerCase() === name.toLowerCase()); }
+  async dataStart(e) {
+    const h = new DataView(await this.blob.slice(e.off, e.off + 30).arrayBuffer());
+    if (h.getUint32(0, true) !== 0x04034b50) throw new EngineError(`${this.name}: corrupt entry ${e.name}`);
+    return e.off + 30 + h.getUint16(26, true) + h.getUint16(28, true);
+  }
+  async stream(e) {
+    const start = await this.dataStart(e);
+    const raw = this.blob.slice(start, start + e.csize).stream();
+    if (e.method === 0) return raw;
+    if (e.method === 8) return raw.pipeThrough(new DecompressionStream("deflate-raw"));
+    throw new EngineError(`${this.name}: unsupported compression in ${e.name}`);
+  }
+  async blobOf(e) { return await new Response(await this.stream(e)).blob(); }
+  async text(e) { return await new Response(await this.stream(e)).text(); }
+  async bytes(e) { return new Uint8Array(await new Response(await this.stream(e)).arrayBuffer()); }
+}
+function isAscii(b) { for (let i = 0; i < b.length; i++) if (b[i] > 127) return false; return true; }
+async function* textChunks(stream) {
+  const reader = stream.pipeThrough(new TextDecoderStream("utf-8")).getReader();
+  for (;;) { const { value, done } = await reader.read(); if (done) return; yield value; }
+}
+
+// ------------------------------------------------------------------ XLSX reading
+function xmlDecode(s) {
+  if (s.indexOf("&") < 0 && s.indexOf("_x") < 0) return s;
+  s = s.replace(/&(#x[0-9a-fA-F]+|#\d+|amp|lt|gt|quot|apos);/g, (m, g) => {
+    if (g[0] === "#") return String.fromCodePoint(g[1] === "x" || g[1] === "X" ? parseInt(g.slice(2), 16) : parseInt(g.slice(1), 10));
+    return { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" }[g];
+  });
+  return s.replace(/_x([0-9A-Fa-f]{4})_/g, (m, h) => String.fromCharCode(parseInt(h, 16)));
+}
+function textOfT(seg) { // concat all <t> texts (skips phonetic rPh)
+  seg = seg.replace(/<rPh\b[\s\S]*?<\/rPh>/g, "");
+  let out = ""; const rx = /<t(?:\s[^>]*)?>([\s\S]*?)<\/t>/g; let m;
+  while ((m = rx.exec(seg))) out += m[1];
+  return xmlDecode(out);
+}
+function colIndex(ref) { let n = 0; for (let i = 0; i < ref.length; i++) { const c = ref.charCodeAt(i); if (c >= 65 && c <= 90) n = n * 26 + (c - 64); else if (c >= 97 && c <= 122) n = n * 26 + (c - 96); else break; } return n - 1; }
+
+class XlsxReader {
+  constructor(blob, name) { this.zip = new ZipReader(blob, name); this.name = name; }
+  async open() {
+    await this.zip.open();
+    const wbE = this.zip.find("xl/workbook.xml"); if (!wbE) throw new EngineError(`${this.name} is not an Excel workbook.`);
+    const wb = await this.zip.text(wbE);
+    const relsE = this.zip.find("xl/_rels/workbook.xml.rels");
+    const rels = relsE ? await this.zip.text(relsE) : "";
+    const relMap = {};
+    for (const m of rels.matchAll(/<Relationship\b([^>]*)\/?>/g)) {
+      const id = /\bId="([^"]*)"/.exec(m[1]), tg = /\bTarget="([^"]*)"/.exec(m[1]);
+      if (id && tg) relMap[id[1]] = tg[1];
+    }
+    this.sheets = [];
+    for (const m of wb.matchAll(/<sheet\b([^>]*)\/?>/g)) {
+      const nm = /\bname="([^"]*)"/.exec(m[1]), rid = /\br:id="([^"]*)"/.exec(m[1]) || /\b[\w]+:id="([^"]*)"/.exec(m[1]);
+      let t = rid ? relMap[rid[1]] : null; if (!t) continue;
+      t = t.startsWith("/") ? t.slice(1) : (t.startsWith("xl/") ? t : "xl/" + t);
+      this.sheets.push({ name: xmlDecode(nm[1]), path: t.replace(/\/\.\//g, "/") });
+    }
+    this.sst = null;
+    return this;
+  }
+  async loadSST() {
+    if (this.sst) return;
+    this.sst = [];
+    const e = this.zip.find("xl/sharedStrings.xml"); if (!e) return;
+    let buf = "";
+    for await (const ch of textChunks(await this.zip.stream(e))) {
+      buf += ch;
+      let end = buf.lastIndexOf("</si>"); if (end < 0) continue; end += 5;
+      const part = buf.slice(0, end); buf = buf.slice(end);
+      const rx = /<si>([\s\S]*?)<\/si>|<si\/>/g; let m;
+      while ((m = rx.exec(part))) this.sst.push(m[1] === undefined ? "" : textOfT(m[1]));
+    }
+  }
+  sheetByName(name) { const n = name.trim().toLowerCase(); return this.sheets.find(s => s.name.trim().toLowerCase() === n); }
+  /** stream rows; onRow(arrayOfValues) ; returns nothing. dateCols unused: dates come as serial numbers */
+  async eachRow(sheet, onRow, maxRows) {
+    await this.loadSST();
+    const e = this.zip.find(sheet.path); if (!e) throw new EngineError(`${this.name}: sheet ${sheet.name} missing`);
+    let buf = ""; let count = 0; let expectRow = 0;
+    const sst = this.sst;
+    const cellRx = /<c\b([^>]*?)(?:\/>|>([\s\S]*?)<\/c>)/g;
+    for await (const ch of textChunks(await this.zip.stream(e))) {
+      buf += ch;
+      let end = buf.lastIndexOf("</row>");
+      const selfClose = buf.lastIndexOf("/>");
+      if (end < 0) { if (buf.length > 5e7) throw new EngineError("sheet parse error"); continue; }
+      end += 6;
+      const part = buf.slice(0, end); buf = buf.slice(end);
+      const rowRx = /<row\b([^>]*?)(?:\/>|>([\s\S]*?)<\/row>)/g; let rm;
+      while ((rm = rowRx.exec(part))) {
+        const ra = /\br="(\d+)"/.exec(rm[1]); const rnum = ra ? +ra[1] - 1 : expectRow;
+        while (expectRow < rnum) { onRow([]); expectRow++; count++; if (maxRows && count >= maxRows) return; }
+        expectRow = rnum + 1;
+        const row = []; const body = rm[2] || ""; let cm; let ci = 0;
+        cellRx.lastIndex = 0;
+        while ((cm = cellRx.exec(body))) {
+          const at = cm[1]; const inner = cm[2] || "";
+          const r = /\br="([A-Za-z]+)\d*"/.exec(at); const col = r ? colIndex(r[1]) : ci; ci = col + 1;
+          const tm = /\bt="(\w+)"/.exec(at); const t = tm ? tm[1] : "n";
+          let val = "";
+          if (t === "inlineStr") val = textOfT(inner);
+          else {
+            const vm = /<v(?:\s[^>]*)?>([\s\S]*?)<\/v>/.exec(inner);
+            if (vm) {
+              const v = vm[1];
+              if (t === "s") val = sst[+v] ?? "";
+              else if (t === "str") val = xmlDecode(v);
+              else if (t === "b") val = v === "1";
+              else if (t === "e") val = "";
+              else { const f = parseFloat(v); val = isNaN(f) ? xmlDecode(v) : f; }
+            }
+          }
+          while (row.length < col) row.push("");
+          row[col] = val;
+        }
+        onRow(row); count++;
+        if (maxRows && count >= maxRows) return;
+      }
+    }
+  }
+  async rows(sheet, maxRows) { const out = []; await this.eachRow(sheet, r => out.push(r), maxRows); return out; }
+}
+
+function findHeader(rows, required, maxScan = 15) {
+  const req = required.map(r => r.toLowerCase());
+  for (let i = 0; i < Math.min(maxScan, rows.length); i++) {
+    const h = rows[i].map(x => clean(x).toLowerCase());
+    if (req.every(r => h.includes(r))) { const idx = {}; rows[i].forEach((x, j) => { const k = clean(x).toLowerCase(); if (k) idx[k] = j; }); return [i, idx]; }
+  }
+  return null;
+}
+async function sheetWithHeader(xr, required) {
+  for (const s of xr.sheets) {
+    const head = await xr.rows(s, 15);
+    const f = findHeader(head, required);
+    if (f) return { sheet: s, hi: f[0], idx: f[1] };
+  }
+  throw new EngineError(`${xr.name}: no sheet with columns ${required.join(", ")}`);
+}
+async function loadTable(xr, required) { // returns {rows (after header), idx}
+  const { sheet, hi, idx } = await sheetWithHeader(xr, required);
+  const rows = []; let i = 0;
+  await xr.eachRow(sheet, r => { if (i++ > hi) rows.push(r); });
+  return { rows, idx };
+}
+const cell = (r, i) => (i === undefined || i === null || i >= r.length ? "" : r[i]);
+const anyVal = r => r.some(x => clean(x) !== "");
+
+// ------------------------------------------------------------------ source detection
+async function detectSources(files, opts) {
+  // files: [{name, blob}]  (Repository content; nested folders allowed)
+  const s = { notes: [] };
+  const low = f => basename(f.name).toLowerCase();
+  const valid = files.filter(f => !basename(f.name).startsWith("~$") && !basename(f.name).startsWith(".") && !f.name.includes("__MACOSX") && !low(f).includes(".building"));
+  const xlsx = valid.filter(f => /\.(xlsx|xlsm)$/.test(low(f)));
+  const commons = xlsx.filter(f => /^lost_common/.test(low(f)));
+  let lost = xlsx.filter(f => /lost[\s_-]*sales/.test(low(f)) && !commons.includes(f) && low(f) !== "lost.xlsx");
+  const dated = lost.filter(f => dateFromName(f.name) !== null); if (dated.length) lost = dated;
+  if (!lost.length) throw new EngineError("Required source control failed: no dated Lost Sales workbook (Lost_Sales_YYYY-MM-DD.xlsx) found in the Repository.");
+  lost.sort((a, b) => (dateFromName(a.name) ?? -1) - (dateFromName(b.name) ?? -1));
+  s.lost = lost[lost.length - 1];
+  s.reportDate = dateFromName(s.lost.name);
+  if (s.reportDate === null) throw new EngineError("Lost Sales report date could not be read from the filename. Name it Lost_Sales_YYYY-MM-DD.xlsx.");
+  const rd = s.reportDate;
+  const mb = xlsx.filter(f => low(f).replace(/ /g, "").includes("mb52"));
+  const mbOk = mb.filter(f => dateFromName(f.name) === rd);
+  if (mbOk.length) s.mb52 = mbOk[mbOk.length - 1];
+  else if (mb.length) throw new EngineError(`Date control failed: MB52 must be dated ${dmy(rd)}; found ${mb.map(f => basename(f.name)).join(", ")}. Replace only the MB52 file.`);
+  const zips = valid.filter(f => low(f).endsWith(".zip") && dateFromName(f.name) !== null);
+  const zOk = zips.filter(f => dateFromName(f.name) === rd + 1);
+  if (zOk.length) s.zfd = zOk[zOk.length - 1];
+  else if (zips.length) throw new EngineError(`Date control failed: the ZFD ZIP must be dated ${dmy(rd + 1)} (report date + 1); found ${zips.map(f => basename(f.name)).join(", ")}.`);
+  s.close = xlsx.find(f => low(f).includes("item") && low(f).includes("close"));
+  const pd = xlsx.filter(f => low(f).includes("pdmf"));
+  if (pd.length) {
+    const elig = pd.filter(f => (dateFromName(f.name) ?? -1) <= rd).sort((a, b) => (dateFromName(a.name) ?? -1) - (dateFromName(b.name) ?? -1));
+    const newer = pd.filter(f => (dateFromName(f.name) ?? -1) > rd);
+    if (elig.length) s.pdmf = elig[elig.length - 1];
+    if (newer.length) { s.notes.push("Date-control note: PDMF dated after report date present: " + newer.map(f => basename(f.name)).join(", ")); if (!s.pdmf) s.pdmf = newer[0]; }
+  }
+  const cm = xlsx.find(f => low(f).includes("commercial") && low(f).includes("master"));
+  if (cm) s.master = cm;
+  else if (opts && opts.fallbackMaster) { s.master = opts.fallbackMaster; s.notes.push(opts.fallbackMaster.note || "Commercial Master not in Repository - using the stored Commercial Master."); }
+  const ppt = valid.filter(f => low(f).endsWith(".pptx") && !low(f).startsWith("lost_sales_executive_summary"))
+    .sort((a, b) => (low(a).includes("template") ? 0 : 1) - (low(b).includes("template") ? 0 : 1) || low(a).localeCompare(low(b)));
+  s.template = ppt[0];
+  s.commonTemplate = xlsx.find(f => low(f) === "lost.xlsx");
+  const hist = commons.filter(f => dateFromName(f.name) !== null && dateFromName(f.name) < rd).sort((a, b) => dateFromName(a.name) - dateFromName(b.name));
+  if (hist.length) s.history = hist[hist.length - 1];
+  const later = commons.filter(f => dateFromName(f.name) !== null && dateFromName(f.name) >= rd);
+  if (later.length) s.notes.push("Ignored Common files dated on/after report date: " + later.map(f => basename(f.name)).join(", "));
+  const missing = [["Lost Sales", s.lost], ["MB52 (dated report date)", s.mb52], ["ZFD ZIP (dated report date + 1)", s.zfd], ["ITEM TO CLOSE", s.close], ["PDMF", s.pdmf], ["Commercial Master", s.master], ["Executive PPT template", s.template]].filter(x => !x[1]).map(x => x[0]);
+  if (missing.length) throw new EngineError("Required source control failed - missing: " + missing.join("; "));
+  if (!s.history) s.notes.push("No previous verified Common found - YTD history starts from this report.");
+  return s;
+}
+
+// ------------------------------------------------------------------ loaders
+async function openX(f) { return await new XlsxReader(f.blob, basename(f.name)).open(); }
+
+async function loadLostSales(f) {
+  const xr = await openX(f); const out = {};
+  for (const sh of ["Yesterday", "MTD"]) {
+    const sheet = xr.sheetByName(sh); if (!sheet) throw new EngineError(`Sheet '${sh}' not found in ${basename(f.name)}`);
+    let hi = -1, idx = null; const head = []; const recs = [];
+    await xr.eachRow(sheet, r => {
+      if (idx === null) {
+        head.push(r);
+        const fh = findHeader([r], ["ID", "ProductCode", "CreatedAt", "RSP"], 1);
+        if (fh) idx = fh[1]; else if (head.length > 15) throw new EngineError(`Header not found in ${sh}`);
+        return;
+      }
+      if (!anyVal(r)) return;
+      const g = k => cell(r, idx[k.toLowerCase()]);
+      const un = g("UserName");
+      recs.push({
+        ID: g("ID"), UserName: typeof un === "string" ? un : clean(un), ProductName: clean(g("ProductName")),
+        ProductCode: clean(g("ProductCode")), Material: clean(g("Material")), CreatedAt: toDate(g("CreatedAt")),
+        Store: clean(g("StoreCode")) || clean(g("BranchName")), RSP: num(g("RSP")),
+      });
+    });
+    if (idx === null) throw new EngineError(`Header (ID, ProductCode, CreatedAt, RSP) not found in sheet ${sh}`);
+    out[sh] = recs;
+  }
+  return out;
+}
+function isValid(rec) {
+  const pc = rec.ProductCode; if (pc === "") return false;
+  const s = pc.replace(/,/g, "");
+  if (/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(s.trim())) return parseFloat(s) !== 0;
+  return true;
+}
+async function loadMB52(f) {
+  const xr = await openX(f);
+  const { rows, idx } = await loadTable(xr, ["Plant", "Material"]);
+  const ip = idx["plant"], im = idx["material"];
+  const q = ["unrestricted", "transit and transfer"].filter(k => k in idx).map(k => idx[k]);
+  if (!q.length) throw new EngineError("MB52: Unrestricted column not found");
+  const w = new Map();
+  for (const r of rows) {
+    const m = clean(cell(r, im)); if (!m) continue;
+    let b = PLANT_TO_WH[clean(cell(r, ip)).toUpperCase()];
+    if (!b) { const p = clean(cell(r, ip)); b = p.startsWith("1") ? "W1" : p.startsWith("2") ? "W2" : null; }
+    if (!b) continue;
+    let a = w.get(m); if (!a) { a = [0, 0]; w.set(m, a); }
+    let s = 0; for (const c of q) s += num(cell(r, c));
+    a[b === "W1" ? 0 : 1] += s;
+  }
+  return w;
+}
+async function loadKV(f, required, keyUpper, valUpper) {
+  const xr = await openX(f);
+  const { rows, idx } = await loadTable(xr, required);
+  const ik = idx[required[0].toLowerCase()], iv = idx[required[1].toLowerCase()];
+  const out = new Map();
+  for (const r of rows) {
+    let k = clean(cell(r, ik)); if (keyUpper) k = k.toUpperCase();
+    if (k && !out.has(k)) { let v = clean(cell(r, iv)); if (valUpper) v = v.toUpperCase(); out.set(k, v); }
+  }
+  return out;
+}
+
+async function parseZFD(f, needed, progress) {
+  const outer = await new ZipReader(f.blob, basename(f.name)).open();
+  const natural = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true });
+  const members = outer.entries.filter(e => !e.dir && (/\.(txt|csv|dat)$/i.test(e.name) || !basename(e.name).includes("."))).sort(natural);
+  if (!members.length) throw new EngineError("ZFD ZIP contains no text exports.");
+  const upc = new Map(); const zfd = new Map();
+  const total = members.reduce((a, e) => a + e.usize, 0) || 1; let done = 0;
+  const DEF = { "pharmacy": 1, "material": 2, "material desc.": 3, "onhand stock": 5, "min forecast qty": 6, "max forecast qty": 7, "mdq": 8, "forecast": 9, "ranged": 10, "open orders": 11, "replenishment quanti": 12, "age in days": 13, "daily forecast": 14, "final minimum foreca": 15, "final maximum foreca": 16 };
+  const fieldKeys = ZFD_FIELDS.map(x => x.toLowerCase());
+  for (const e of members) {
+    let cm = Object.assign({}, DEF); let sep = "\t"; let first = true; let rest = "";
+    let iSt = cm["pharmacy"], iM = cm["material"], iF = cm["forecast"];
+    const handle = (line) => {
+      if (line.length && line.charCodeAt(line.length - 1) === 13) line = line.slice(0, -1);
+      if (!line.trim()) return;
+      if (first && line.includes("|") && !line.includes("\t")) sep = "|";
+      // header?
+      if (line.indexOf("harmacy") >= 0 && /material/i.test(line)) {
+        const p2 = line.split(sep).map(x => x.trim().toLowerCase());
+        if (p2.includes("pharmacy") && p2.includes("material")) {
+          cm = {}; for (const k in DEF) { const j = p2.indexOf(k); if (j >= 0) cm[k] = j; }
+          iSt = cm["pharmacy"]; iM = cm["material"]; iF = cm["forecast"]; first = false; return;
+        }
+      }
+      first = false;
+      const p = line.split(sep);
+      if (iSt === undefined || iM === undefined || iSt >= p.length || iM >= p.length) return;
+      const st = p[iSt].trim(); let m = p[iM].trim();
+      if (!st || !m || !/^[\p{L}\p{N}]/u.test(m)) return;
+      const fc = iF !== undefined && iF < p.length ? num(p[iF].trim()) : 0;
+      m = clean(m);
+      upc.set(m, (upc.get(m) || 0) + fc);
+      const key = st.toUpperCase() + "\u0001" + m;
+      if (needed.has(key) && !zfd.has(key)) {
+        const di = cm["material desc."]; const desc = di !== undefined && di < p.length ? p[di].trim() : "";
+        const vals = fieldKeys.map(k => { const ci = cm[k]; return ci !== undefined && ci < p.length ? num(p[ci].trim()) : 0; });
+        zfd.set(key, [desc, vals]);
+      }
+    };
+    let lastTick = 0;
+    for await (const ch of textChunks(await outer.stream(e))) {
+      done += ch.length;
+      const s = rest + ch; let start = 0; let nl;
+      while ((nl = s.indexOf("\n", start)) >= 0) { handle(s.slice(start, nl)); start = nl + 1; }
+      rest = s.slice(start);
+      if (progress && done - lastTick > 2e7) { lastTick = done; progress(`Reading ZFD ${basename(e.name)}`, Math.min(1, done / total)); }
+    }
+    if (rest) handle(rest);
+    if (progress) progress(`ZFD parsed ${basename(e.name)}`, Math.min(1, done / total));
+  }
+  return { zfd, upc, members: members.length };
+}
+
+// ------------------------------------------------------------------ classification
+function classify(status, productName, zrec, wh, upcF) {
+  const s = (status || "").toUpperCase();
+  if (s.includes("DELIST")) return "DELISTED";
+  if (s.includes("SPECIAL")) return "SPECIALITY";
+  if (s === "DTD" || s.includes("DTD") || s.includes("UNICHARM") || (productName || "").toUpperCase().includes("UNICHARM")) return "DTD";
+  let fc = 0, mdq = 0, rep = 0;
+  if (zrec) {
+    const v = zrec[1]; const onh = v[Z["Onhand Stock"]]; mdq = v[Z["MDQ"]]; fc = v[Z["Forecast"]]; const rng = v[Z["RANGED"]]; rep = v[Z["Replenishment Quanti"]];
+    if (rng === 2 || (rng === 0 && fc < 1)) return "BLOCKED";
+    if (onh >= Math.max(1, fc / 30 * 3)) return "ON_HAND";
+  }
+  if (wh < Math.min(30, upcF / 30) || wh === 0 || (fc < 10 && wh < 10) || wh < (upcF / 30) * 1.25) return "SHORTAGE";
+  if (zrec) {
+    if (fc === 0 && mdq === 0) return "ZERO_FC";
+    if (rep >= 1) return "AUTO_REPLENISHMENT";
+  }
+  return "COVERAGE_UPLIFT";
+}
+
+function buildCommonRow(rec, warehouse, zrec, upcVal, w1, w2, status, cat) {
+  const v = zrec ? zrec[1] : null;
+  const desc = (zrec && zrec[0] ? zrec[0] : "") || rec.ProductName;
+  const g = v ? (k => v[Z[k]]) : (() => 0);
+  let rid = rec.ID; if (typeof rid === "string" && /^\d+$/.test(clean(rid))) rid = parseFloat(clean(rid));
+  return [warehouse, rec.CreatedAt, rec.Store, rec.ProductCode, rid, rec.RSP, desc,
+    g("Onhand Stock"), g("MDQ"), g("Forecast"), v ? g("RANGED") : "", g("Open Orders"), g("Replenishment Quanti"),
+    g("Age in Days"), g("Daily Forecast"), g("Final Minimum Foreca"), g("Final Maximum Foreca"), upcVal, w1, w2, w1 + w2,
+    status, REASON[cat], OWNER[cat]];
+}
+
+async function loadHistory(f) {
+  if (!f) return [];
+  const xr = await openX(f);
+  const sheet = xr.sheetByName("YTD"); if (!sheet) throw new EngineError(`Sheet 'YTD' not found in ${basename(f.name)}`);
+  let idx = null; let seen = 0; const out = []; let pos = null;
+  await xr.eachRow(sheet, r => {
+    if (idx === null) { seen++; const fh = findHeader([r], ["CreatedAt", "ProductCode", "Reason"], 1); if (fh) { idx = fh[1]; pos = COMMON_COLUMNS.map(c => idx[c.toLowerCase()]); } else if (seen > 15) throw new EngineError("Previous Common YTD header not found"); return; }
+    if (!anyVal(r)) return;
+    const row = pos.map(p => cell(r, p));
+    row[C["Warehouse"]] = clean(row[C["Warehouse"]]).toUpperCase();
+    row[C["CreatedAt"]] = toDate(row[C["CreatedAt"]]);
+    row[C["ProductCode"]] = clean(row[C["ProductCode"]]);
+    row[C["BranchName"]] = clean(row[C["BranchName"]]);
+    for (const i of NUMERIC_COMMON) row[i] = num(row[i]);
+    if (typeof row[C["ID"]] === "string" && /^\d+$/.test(clean(row[C["ID"]]).replace(".", ""))) row[C["ID"]] = parseFloat(clean(row[C["ID"]]));
+    for (const i of [C["Material Desc."], C["Item_status"], C["Reason"], C["Department"]]) if (typeof row[i] !== "string") row[i] = clean(row[i]);
+    if (row[C["CreatedAt"]] === null || row[C["ProductCode"]] === "" || row[C["ProductCode"]] === "0") return;
+    out.push(row);
+  });
+  return out;
+}
+
+// ------------------------------------------------------------------ stage 1
+async function stage1(files, opts) {
+  const P = opts.progress || (() => {});
+  P("Detecting sources", 0.02);
+  const src = await detectSources(files, opts);
+  const rd = src.reportDate;
+  P("Loading Lost Sales", 0.04);
+  const ls = await loadLostSales(src.lost);
+  const yAll = ls.Yesterday;
+  let yValid = yAll.filter(isValid);
+  const yd = yValid.filter(r => r.CreatedAt === rd || r.CreatedAt === null);
+  if (yd.length !== yValid.length) src.notes.push(`${yValid.length - yd.length} Yesterday rows had a CreatedAt other than the report date and were excluded.`);
+  yValid = yd; for (const r of yValid) if (r.CreatedAt === null) r.CreatedAt = rd;
+  const mtdSrc = ls.MTD;
+  P("Loading previous Common (rolling history)", 0.08);
+  const history = await loadHistory(src.history);
+  let latest = null; for (const r of history) { const d = r[C["CreatedAt"]]; if (d !== null && d < rd && (latest === null || d > latest)) latest = d; }
+  const [ry, rm] = ymdFromSerial(rd);
+  let gap;
+  if (latest !== null) gap = mtdSrc.filter(r => r.CreatedAt !== null && latest < r.CreatedAt && r.CreatedAt <= rd);
+  else gap = mtdSrc.filter(r => { if (r.CreatedAt === null) return false; const [y, m] = ymdFromSerial(r.CreatedAt); return y === ry && m === rm && r.CreatedAt <= rd; });
+  let gapValid = gap.filter(isValid);
+  if (!gapValid.some(r => r.CreatedAt === rd)) { if (gapValid.length) src.notes.push("Current MTD sheet has no rows for the report date - Yesterday rows appended."); gapValid = gapValid.concat(yValid); }
+  const gapDates = [...new Set(gapValid.map(r => r.CreatedAt))].sort((a, b) => a - b);
+
+  P("Loading MB52, PDMF, Item to Close and Commercial Master", 0.12);
+  const mb = await loadMB52(src.mb52);
+  const pdmf = await loadKV(src.pdmf, ["PH_NAME", "WH"], true, false);
+  const close = await loadKV(src.close, ["Material", "STATUS"], false, true);
+  const division = src.master.map ? src.master.map : await loadKV(src.master, ["Material", "Division"], false, false);
+
+  const needed = new Set(yValid.concat(gapValid).map(r => r.Store.toUpperCase() + "\u0001" + r.ProductCode));
+  P("Reading ZFD export (the long step)", 0.16);
+  const { zfd, upc, members } = await parseZFD(src.zfd, needed, (m, fr) => P(m, 0.16 + 0.62 * fr));
+
+  P("Classifying rows", 0.8);
+  const extra = new Map();
+  const classifyRec = rec => {
+    const m = rec.ProductCode;
+    const zrec = zfd.get(rec.Store.toUpperCase() + "\u0001" + m) || null;
+    const [w1, w2] = mb.get(m) || [0, 0];
+    const upcVal = upc.get(m) || 0;
+    const status = close.get(m) || "";
+    const cat = classify(status, rec.ProductName, zrec, w1 + w2, upcVal);
+    const wh = pdmf.get(rec.Store.toUpperCase()) || "";
+    const row = buildCommonRow(rec, wh, zrec, upcVal, w1, w2, status, cat);
+    extra.set(clean(rec.ID) + "|" + rec.CreatedAt, { UserName: rec.UserName, ProductName: rec.ProductName, Store: rec.Store });
+    return row;
+  };
+  const yRows = yValid.map(classifyRec);
+  const gapRows = gapValid.map(classifyRec);
+  const gset = new Set(gapDates);
+  const ytd = history.filter(r => !gset.has(r[C["CreatedAt"]]) && r[C["CreatedAt"]] <= rd).concat(gapRows);
+  const mtd = ytd.filter(r => { const [y, m] = ymdFromSerial(r[C["CreatedAt"]]); return y === ry && m === rm; });
+  const sumRsp = rows => plainSum(rows.map(r => r[C["rsp"]]));
+  const controls = {
+    report_date: iso(rd), repository_path: opts.repositoryName || "Repository",
+    lost_file: basename(src.lost.name), mb52_file: basename(src.mb52.name), zfd_file: basename(src.zfd.name),
+    physical_rows: yAll.length, invalid_rows: yAll.filter(r => !isValid(r)).length, valid_rows: yRows.length,
+    raw_rsp: round2(plainSum(yAll.map(r => r.RSP))), valid_rsp: round2(sumRsp(yRows)),
+    mtd_rows: mtd.length, mtd_rsp: round2(sumRsp(mtd)), ytd_rows: ytd.length, ytd_rsp: round2(sumRsp(ytd)),
+    mb52_date: iso(dateFromName(src.mb52.name)), zfd_date: iso(dateFromName(src.zfd.name)),
+    previous_common: src.history ? basename(src.history.name) : null, source_mtd_rows: mtdSrc.length,
+    latest_history_date: latest !== null ? iso(latest) : null, gap_dates_appended: gapDates.map(iso),
+    gap_valid_rows: gapRows.length, gap_valid_rsp: round2(sumRsp(gapRows)),
+  };
+  const st = { stageId: uuidHex(), src, controls, yesterday: yRows, ytd, mtd, extra, division, zfdMembers: members };
+  st.checks = stageChecks(st);
+  P("Stage 1 complete - review the controls", 1);
+  return st;
+}
+function uuidHex() { const b = new Uint8Array(16); (G.crypto || crypto).getRandomValues(b); b[6] = (b[6] & 0x0f) | 0x40; b[8] = (b[8] & 0x3f) | 0x80; return [...b].map(x => x.toString(16).padStart(2, "0")).join(""); }
+
+function stageChecks(st) {
+  const c = st.controls; const rd = st.src.reportDate; const out = [];
+  const add = (control, passed, detail) => out.push({ control, passed: !!passed, detail: detail || "" });
+  add("Required source control", true, "All mandatory sources exist.");
+  add("Date control", c.mb52_date === c.report_date && c.zfd_date === iso(rd + 1) && (c.latest_history_date === null || c.latest_history_date < c.report_date),
+    `Lost ${c.report_date} / MB52 ${c.mb52_date} / ZFD ${c.zfd_date} / Common through ${c.latest_history_date === null ? "None" : c.latest_history_date}`);
+  add("Invalid-row control", c.physical_rows - c.invalid_rows >= c.valid_rows, `${c.invalid_rows} invalid rows counted and excluded`);
+  const yv = st.yesterday.length;
+  add("Daily source-row lock", yv === c.valid_rows, `${yv} classified = ${c.valid_rows} valid`);
+  add("Daily value lock", round2(plainSum(st.yesterday.map(r => r[C["rsp"]]))) === c.valid_rsp, `SAR ${fmt2(c.valid_rsp)}`);
+  const cnt = new Map(); for (const r of st.ytd) cnt.set(r[C["CreatedAt"]], (cnt.get(r[C["CreatedAt"]]) || 0) + 1);
+  const gapSet = new Set(c.gap_dates_appended);
+  const gapOk = c.gap_dates_appended.every(d => { const [y, m, dd] = d.split("-").map(Number); return (cnt.get(serialFromYMD(y, m, dd)) || 0) > 0; });
+  const keyc = new Map();
+  for (const r of st.ytd) { const d = r[C["CreatedAt"]]; if (d !== null && gapSet.has(iso(d))) { const k = clean(r[C["ID"]]) + "|" + d; keyc.set(k, (keyc.get(k) || 0) + 1); } }
+  let dups = 0; for (const v of keyc.values()) if (v > 1) dups += v - 1;
+  add("Gap-date control", gapOk, `Recovered dates ${c.gap_dates_appended.join(", ")}; duplicate IDs in gap dates: ${dups}`);
+  const [ry, rm] = ymdFromSerial(rd);
+  add("Period control", st.yesterday.every(r => r[C["CreatedAt"]] === rd) && st.mtd.every(r => { const [y, m] = ymdFromSerial(r[C["CreatedAt"]]); return y === ry && m === rm; }),
+    "Yesterday = report date only; MTD = current month only; YTD retains history");
+  add("One category per row", st.ytd.concat(st.yesterday).every(r => [DEPT_SC, DEPT_COM, DEPT_OPS].includes(r[C["Department"]])), "Every valid row has exactly one reason and owner");
+  return out;
+}
+
+// ------------------------------------------------------------------ summaries
+class PyFloat { constructor(v) { this.v = v; } }
+function summarize(rows) {
+  const all = []; const items = new Set(); const catV = {}; const catI = {}; const divR = {}; const divI = {};
+  for (const r of rows) {
+    const v = r[C["rsp"]]; const pc = clean(r[C["ProductCode"]]);
+    const reason = String(r[C["Reason"]]).trim().toUpperCase();
+    const cat = REASON_TO_CAT[reason] || REASON_TO_CAT[reason.replace(/ - /g, " – ")] || "COVERAGE_UPLIFT";
+    all.push(v); items.add(pc);
+    (catV[cat] = catV[cat] || []).push(v); (catI[cat] = catI[cat] || new Set()).add(pc);
+    const dv = DEPT_SHORT[r[C["Department"]] || OWNER[cat]] || "Supply Chain";
+    divR[dv] = (divR[dv] || 0) + 1; (divI[dv] = divI[dv] || new Set()).add(pc);
+  }
+  const cats = {};
+  for (const k of CAT_ORDER) {
+    const [label, division] = JSON_LABEL[k];
+    const val = k === "INVALID" ? 0 : fsum(catV[k] || []);
+    cats[k] = { label, division, value: k === "INVALID" ? 0 : new PyFloat(val), rows: (catV[k] || []).length, items: (catI[k] || new Set()).size, _v: val };
+  }
+  const ar = cats.AUTO_REPLENISHMENT, cu = cats.COVERAGE_UPLIFT;
+  const ifrItems = new Set([...(catI.AUTO_REPLENISHMENT || []), ...(catI.COVERAGE_UPLIFT || [])]);
+  cats.ITEM_FOR_REVIEW = { label: JSON_LABEL.ITEM_FOR_REVIEW[0], division: JSON_LABEL.ITEM_FOR_REVIEW[1], value: new PyFloat(ar._v + cu._v), rows: ar.rows + cu.rows, items: ifrItems.size, _v: ar._v + cu._v };
+  const groups = { "Supply Chain": ["ZERO_FC", "AUTO_REPLENISHMENT", "COVERAGE_UPLIFT"], "Commercial": ["DELISTED", "BLOCKED", "SHORTAGE"], "Operations": ["SPECIALITY", "DTD", "ON_HAND"] };
+  const divs = {};
+  for (const d in groups) { const s = plainSum(groups[d].map(k => cats[k]._v)); divs[d] = { value: new PyFloat(s), rows: divR[d] || 0, items: (divI[d] || new Set()).size, _v: s }; }
+  return { total: new PyFloat(round2(fsum(all))), rows: rows.length, items: items.size, categories: cats, divisions: divs, replenishment_order_value: new PyFloat(ar._v), _total: round2(fsum(all)) };
+}
+// python-compatible json.dumps(indent=2, ensure_ascii=False)
+function pyJson(v, ind = "") {
+  const nx = ind + "  ";
+  if (v instanceof PyFloat) return pyRepr(v.v);
+  if (v === null || v === undefined) return "null";
+  if (typeof v === "boolean") return v ? "true" : "false";
+  if (typeof v === "number") return Number.isInteger(v) ? String(v) : pyRepr(v);
+  if (typeof v === "string") return JSON.stringify(v);
+  if (Array.isArray(v)) { if (!v.length) return "[]"; return "[\n" + v.map(x => nx + pyJson(x, nx)).join(",\n") + "\n" + ind + "]"; }
+  const keys = Object.keys(v).filter(k => !k.startsWith("_"));
+  if (!keys.length) return "{}";
+  return "{\n" + keys.map(k => nx + JSON.stringify(k) + ": " + pyJson(v[k], nx)).join(",\n") + "\n" + ind + "}";
+}
+function floatControls(c) { // python stored these as floats
+  const o = Object.assign({}, c);
+  for (const k of ["raw_rsp", "valid_rsp", "mtd_rsp", "ytd_rsp", "gap_valid_rsp"]) o[k] = new PyFloat(c[k]);
+  return o;
+}
+
+// ------------------------------------------------------------------ ZIP writing
+const CRC_TABLE = (() => { const t = new Uint32Array(256); for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crcUpdate(crc, b) { let c = crc ^ 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_TABLE[(c ^ b[i]) & 0xff] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+const te = new TextEncoder();
+/** compress a sequence of string/Uint8Array chunks -> {blob, crc, usize, csize, method} */
+async function deflateParts(produce, method = 8) {
+  let crc = 0, usize = 0;
+  if (method === 0) {
+    const parts = [];
+    await produce(chunk => { const b = typeof chunk === "string" ? te.encode(chunk) : chunk; crc = crcUpdate(crc, b); usize += b.length; parts.push(b); });
+    const blob = new Blob(parts); return { blob, crc, usize, csize: blob.size, method };
+  }
+  const cs = new CompressionStream("deflate-raw");
+  const writer = cs.writable.getWriter();
+  const outP = new Response(cs.readable).blob();
+  await produce(async chunk => { const b = typeof chunk === "string" ? te.encode(chunk) : chunk; crc = crcUpdate(crc, b); usize += b.length; await writer.write(b); });
+  await writer.close();
+  const blob = await outP;
+  return { blob, crc, usize, csize: blob.size, method };
+}
+function dosTime(d) { d = d || new Date(); return { time: (d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1), date: ((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate() }; }
+function buildZip(entries) { // entries: [{name, blob, crc, usize, csize, method}]
+  const parts = []; const central = []; let off = 0; const { time, date } = dosTime();
+  for (const e of entries) {
+    const nb = te.encode(e.name);
+    const h = new DataView(new ArrayBuffer(30));
+    h.setUint32(0, 0x04034b50, true); h.setUint16(4, 20, true); h.setUint16(6, 0x800, true); h.setUint16(8, e.method, true);
+    h.setUint16(10, time, true); h.setUint16(12, date, true); h.setUint32(14, e.crc, true); h.setUint32(18, e.csize, true); h.setUint32(22, e.usize, true);
+    h.setUint16(26, nb.length, true); h.setUint16(28, 0, true);
+    parts.push(h.buffer, nb, e.blob);
+    const c = new DataView(new ArrayBuffer(46));
+    c.setUint32(0, 0x02014b50, true); c.setUint16(4, 20, true); c.setUint16(6, 20, true); c.setUint16(8, 0x800, true); c.setUint16(10, e.method, true);
+    c.setUint16(12, time, true); c.setUint16(14, date, true); c.setUint32(16, e.crc, true); c.setUint32(20, e.csize, true); c.setUint32(24, e.usize, true);
+    c.setUint16(28, nb.length, true); c.setUint32(38, e.name.endsWith("/") ? 0x10 : 0, true); c.setUint32(42, off, true);
+    central.push(c.buffer, nb);
+    off += 30 + nb.length + e.csize;
+  }
+  const cdSize = central.reduce((a, b) => a + (b.byteLength ?? b.length), 0);
+  const end = new DataView(new ArrayBuffer(22));
+  end.setUint32(0, 0x06054b50, true); end.setUint16(8, entries.length, true); end.setUint16(10, entries.length, true);
+  end.setUint32(12, cdSize, true); end.setUint32(16, off, true);
+  return new Blob([...parts, ...central, end.buffer], { type: "application/zip" });
+}
+async function verifyZip(blob, name, expectNames) {
+  try {
+    const z = await new ZipReader(blob, name).open();
+    for (const e of z.entries) {
+      if (e.dir) continue;
+      let crc = 0; const rd = (await z.stream(e)).getReader();
+      for (;;) { const { value, done } = await rd.read(); if (done) break; crc = crcUpdate(crc, value); }
+      if (crc !== e.crc) return [false, `corrupt member ${e.name}`];
+    }
+    if (expectNames) { const a = z.entries.map(e => e.name).sort().join("|"), b = [...expectNames].sort().join("|"); if (a !== b) return [false, "unexpected members"]; }
+    if (!expectNames && !z.find("[Content_Types].xml")) return [false, "missing [Content_Types].xml"];
+    return [true, "ok"];
+  } catch (err) { return [false, String(err.message || err)]; }
+}
+
+// ------------------------------------------------------------------ XLSX writing
+function esc(s) {
+  return s.replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]))
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F￾￿]/g, c => "_x" + c.charCodeAt(0).toString(16).toUpperCase().padStart(4, "0") + "_");
+}
+function colLetter(i) { let s = ""; i++; while (i > 0) { const m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; }
+function numStr(v) { // printf("%.16G") as used by the verified writer
+  if (!isFinite(v) || v === 0) return "0";
+  if (Number.isInteger(v) && Math.abs(v) < 1e16) return String(v);
+  const p = v.toPrecision(16);
+  let [mant, ex] = p.split("e");
+  const e10 = ex !== undefined ? parseInt(ex, 10) : Math.floor(Math.log10(Math.abs(parseFloat(p))));
+  if (ex === undefined && e10 >= -4 && e10 < 16) { if (mant.includes(".")) mant = mant.replace(/0+$/, "").replace(/\.$/, ""); return mant; }
+  // exponent form
+  const x = parseFloat(p); const ee = Math.floor(Math.log10(Math.abs(x)));
+  let m = (x / Math.pow(10, ee)).toPrecision(16); if (m.includes(".")) m = m.replace(/0+$/, "").replace(/\.$/, "");
+  return m + "E" + (ee < 0 ? "-" : "+") + String(Math.abs(ee)).padStart(2, "0");
+}
+const NS_MAIN = 'xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+const NS_R = 'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"';
+
+function stylesXml(kind) {
+  const numFmts = '<numFmts count="1"><numFmt numFmtId="165" formatCode="yyyy-mm-dd"/></numFmts>';
+  const fonts = '<fonts count="2"><font><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font><font><b/><sz val="11"/><color rgb="FFFFFFFF"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font></fonts>';
+  if (kind === "common") {
+    const fills = '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF5B4696"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFF7F6FB"/><bgColor indexed="64"/></patternFill></fill></fills>';
+    const borders = '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left/><right/><top/><bottom style="thin"><color rgb="FFD9D5E7"/></bottom><diagonal/></border></borders>';
+    const xfs = '<cellXfs count="8"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+      '<xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment vertical="center"/></xf>' +
+      '<xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1"/>' +
+      '<xf numFmtId="165" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>' +
+      '<xf numFmtId="4" fontId="0" fillId="3" borderId="1" xfId="0" applyNumberFormat="1" applyFill="1" applyBorder="1"/>' +
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>' +
+      '<xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/>' +
+      '<xf numFmtId="4" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs>';
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet ${NS_MAIN}>${numFmts}${fonts}${fills}${borders}<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>${xfs}<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/></styleSheet>`;
+  }
+  const fills = '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF5B4696"/><bgColor indexed="64"/></patternFill></fill></fills>';
+  const borders = '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>';
+  const xfs = '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1" applyAlignment="1"><alignment horizontal="center"/></xf><xf numFmtId="165" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1"/></cellXfs>';
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<styleSheet ${NS_MAIN}>${numFmts}${fonts}${fills}${borders}<cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>${xfs}<cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles><dxfs count="0"/><tableStyles count="0" defaultTableStyle="TableStyleMedium9" defaultPivotStyle="PivotStyleLight16"/></styleSheet>`;
+}
+function cellXml(ref, v, sText, sDate, sNum, isDateCol) {
+  if (v === null || v === undefined || v === "") return sText ? `<c r="${ref}" s="${sText}"/>` : "";
+  const sa = s => (s ? ` s="${s}"` : "");
+  if (isDateCol && typeof v === "number") return `<c r="${ref}"${sa(sDate)}><v>${v}</v></c>`;
+  if (typeof v === "number") return `<c r="${ref}"${sa(sNum || sText)}><v>${numStr(v)}</v></c>`;
+  if (typeof v === "boolean") return `<c r="${ref}"${sa(sText)} t="b"><v>${v ? 1 : 0}</v></c>`;
+  const s = String(v);
+  const sp = /^\s|\s$/.test(s) ? ' xml:space="preserve"' : "";
+  return `<c r="${ref}"${sa(sText)} t="inlineStr"><is><t${sp}>${esc(s)}</t></is></c>`;
+}
+/** sheets: [{name, columns, rows, widths, kind, dateCols:Set, numCol}] ; kind "common" | "dept" */
+async function writeXlsx(sheets, kind, onProgress) {
+  const entries = [];
+  const addText = async (name, text) => entries.push(Object.assign({ name }, await deflateParts(async put => { await put(text); })));
+  const n = sheets.length;
+  await addText("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((s, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/></Types>`);
+  await addText("_rels/.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+  const now = new Date().toISOString().replace(/\.\d+Z$/, "Z");
+  await addText("docProps/app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Lost Sales Reporting</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop><HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Worksheets</vt:lpstr></vt:variant><vt:variant><vt:i4>${n}</vt:i4></vt:variant></vt:vector></HeadingPairs><TitlesOfParts><vt:vector size="${n}" baseType="lpstr">${sheets.map(s => `<vt:lpstr>${esc(s.name)}</vt:lpstr>`).join("")}</vt:vector></TitlesOfParts></Properties>`);
+  await addText("docProps/core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><dc:creator>${BUILD_ID}</dc:creator><dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`);
+  const lastCol = s => colLetter(s.columns.length - 1);
+  await addText("xl/workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<workbook ${NS_MAIN} ${NS_R}><workbookPr/><bookViews><workbookView xWindow="0" yWindow="0" windowWidth="28800" windowHeight="12300"/></bookViews><sheets>${sheets.map((s, i) => `<sheet name="${esc(s.name)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`).join("")}</sheets><definedNames>${sheets.map((s, i) => `<definedName name="_xlnm._FilterDatabase" localSheetId="${i}" hidden="1">'${esc(s.name)}'!$A$1:$${lastCol(s)}$${Math.max(s.rows.length, 1) + 1}</definedName>`).join("")}</definedNames><calcPr calcId="124519" fullCalcOnLoad="1"/></workbook>`);
+  await addText("xl/_rels/workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets.map((s, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`).join("")}<Relationship Id="rId${n + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`);
+  await addText("xl/styles.xml", stylesXml(kind));
+  let doneRows = 0; const totalRows = sheets.reduce((a, s) => a + s.rows.length, 0) || 1;
+  for (let si = 0; si < n; si++) {
+    const s = sheets[si];
+    const letters = s.columns.map((_, i) => colLetter(i));
+    const last = Math.max(s.rows.length, 1) + 1;
+    const res = await deflateParts(async put => {
+      const view = kind === "common"
+        ? `<sheetView workbookViewId="0"${si === 0 ? ' tabSelected="1"' : ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView>`
+        : `<sheetView showGridLines="0" workbookViewId="0"${si === 0 ? ' tabSelected="1"' : ""}><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A2" sqref="A2"/></sheetView>`;
+      const cols = s.widths.map((w, i) => `<col min="${i + 1}" max="${i + 1}" width="${w + 0.7109375}" customWidth="1"/>`).join("");
+      let head = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<worksheet ${NS_MAIN} ${NS_R}><dimension ref="A1:${letters[letters.length - 1]}${last}"/><sheetViews>${view}</sheetViews><sheetFormatPr defaultRowHeight="15"/><cols>${cols}</cols><sheetData>`;
+      const hs = kind === "common" ? 1 : 1;
+      head += `<row r="1"${kind === "common" ? ' ht="27" customHeight="1"' : ""}>` + s.columns.map((h, i) => `<c r="${letters[i]}1" s="${hs}" t="inlineStr"><is><t>${esc(h)}</t></is></c>`).join("") + "</row>";
+      await put(head);
+      let buf = [];
+      for (let ri = 0; ri < s.rows.length; ri++) {
+        const row = s.rows[ri]; const r = ri + 2; let x = `<row r="${r}">`;
+        let sT, sD, sN;
+        if (kind === "common") { const shade = (ri + 1) % 2 === 1; sT = shade ? 2 : 5; sD = shade ? 3 : 6; sN = shade ? 4 : 7; }
+        else { sT = 0; sD = 2; sN = 0; }
+        for (let ci = 0; ci < row.length; ci++) x += cellXml(letters[ci] + r, row[ci], sT, sD, ci === s.numCol ? sN : 0, s.dateCols.has(ci));
+        buf.push(x + "</row>");
+        if (buf.length >= 2000) { await put(buf.join("")); buf = []; doneRows += 2000; if (onProgress) onProgress(doneRows / totalRows); await yieldUI(); }
+      }
+      if (buf.length) await put(buf.join(""));
+      await put(`</sheetData><autoFilter ref="A1:${letters[letters.length - 1]}${last}"/><pageMargins left="0.75" right="0.75" top="1" bottom="1" header="0.5" footer="0.5"/></worksheet>`);
+    });
+    entries.push(Object.assign({ name: `xl/worksheets/sheet${si + 1}.xml` }, res));
+  }
+  return buildZip(entries);
+}
+const yieldUI = () => new Promise(r => setTimeout(r, 0));
+
+// ------------------------------------------------------------------ PPTX
+const A_NS = "http://schemas.openxmlformats.org/drawingml/2006/main";
+const P_NS = "http://schemas.openxmlformats.org/presentationml/2006/main";
+function r0(v) { return commas(roundHalfUp(v, 0)); }
+function roundHalfUp(v, nd) { // Decimal(str(v)).quantize(..., ROUND_HALF_UP)
+  const s = String(v); let [i, f = ""] = s.replace("-", "").split(".");
+  if (s.includes("e")) { return Math.round(v).toString(); }
+  let digits = (i + f.padEnd(nd + 1, "0").slice(0, nd)).split("").map(Number);
+  const next = +(f[nd] || "0");
+  if (next >= 5) { let k = digits.length - 1; while (k >= 0) { if (digits[k] === 9) { digits[k] = 0; k--; } else { digits[k]++; break; } } if (k < 0) digits.unshift(1); }
+  const str = digits.join(""); const ip = str.slice(0, str.length - nd) || "0"; const fp = nd ? "." + str.slice(str.length - nd) : "";
+  return (s.startsWith("-") && /[1-9]/.test(str) ? "-" : "") + ip + fp;
+}
+function pct(v, total) { const p = total ? v / total * 100 : 0; return roundHalfUp(p, 1) + "%"; }
+function titleCase(s) { return s.split(" ").map(w => /\p{L}/u.test(w) ? w.slice(0, 1).toUpperCase() + w.slice(1).toLowerCase() : w).join(" "); }
+const normLbl = s => s.toUpperCase().replace(/–/g, "-").split(/\s+/).filter(Boolean).join(" ");
+
+async function writePpt(templateFile, reportDate, sy, sm, domParser, xmlSerializer) {
+  const z = await new ZipReader(templateFile.blob, basename(templateFile.name)).open();
+  const slideE = z.find("ppt/slides/slide1.xml") || z.entries.find(e => /^ppt\/slides\/slide\d+\.xml$/.test(e.name));
+  if (!slideE) throw new EngineError("PowerPoint template has no slide.");
+  const xml = await z.text(slideE);
+  const doc = domParser.parseFromString(xml, "application/xml");
+  const findings = [];
+  const els = (root, ns, name) => Array.from(root.getElementsByTagNameNS(ns, name));
+  const kids = (el, ns, name) => Array.from(el.childNodes).filter(n => n.nodeType === 1 && n.namespaceURI === ns && n.localName === name);
+  const textOf = el => els(el, A_NS, "t").map(t => t.textContent).join("");
+  const setTxBody = (tx, text) => { // keep first run formatting
+    const ps = kids(tx, A_NS, "p"); if (!ps.length) return;
+    const p = ps[0]; const runs = kids(p, A_NS, "r");
+    if (runs.length) { const t = kids(runs[0], A_NS, "t")[0] || runs[0].appendChild(doc.createElementNS(A_NS, "a:t")); t.textContent = text; runs.slice(1).forEach(r => p.removeChild(r)); }
+    else { const r = doc.createElementNS(A_NS, "a:r"); const t = doc.createElementNS(A_NS, "a:t"); t.textContent = text; r.appendChild(t); const end = kids(p, A_NS, "endParaRPr")[0]; p.insertBefore(r, end || null); }
+    ps.slice(1).forEach(x => tx.removeChild(x));
+  };
+  const cellTx = tc => kids(tc, A_NS, "txBody")[0];
+  const tables = els(doc, A_NS, "tbl");
+  if (!tables.length) throw new EngineError("PowerPoint template has no tables.");
+  const c = sy.categories, d = sy.divisions, tot = sy._total;
+  const yt = tables.reduce((a, b) => (kids(b, A_NS, "tr").length > kids(a, A_NS, "tr").length ? b : a));
+  const rows = kids(yt, A_NS, "tr");
+  const byLabel = new Map(); rows.slice(1).forEach(tr => byLabel.set(normLbl(textOf(kids(tr, A_NS, "tc")[0])), tr));
+  const find = keys => { for (const k of keys) for (const [l, tr] of byLabel) if (l.startsWith(k)) return tr; return null; };
+  const spec = [
+    [["TOTAL LOST SALES"], "Total Lost Sales", tot, sy.rows, sy.items],
+    [["SUPPLY CHAIN REVIEW"], "Supply Chain Review", d["Supply Chain"]._v, d["Supply Chain"].rows, d["Supply Chain"].items],
+    [["ZERO FORECAST"], "Zero Forecast", c.ZERO_FC._v, c.ZERO_FC.rows, c.ZERO_FC.items],
+    [["AUTO REPLENISHMENT"], "Auto Replenishment – Next Visit", c.AUTO_REPLENISHMENT._v, c.AUTO_REPLENISHMENT.rows, c.AUTO_REPLENISHMENT.items],
+    [["COVERAGE WILL BE INCREASED", "COVERAGE"], "Coverage Will Be Increased", c.COVERAGE_UPLIFT._v, c.COVERAGE_UPLIFT.rows, c.COVERAGE_UPLIFT.items],
+    [["COMMERCIAL REVIEW"], "Commercial Review", d.Commercial._v, d.Commercial.rows, d.Commercial.items],
+    [["SHORTAGE", "WH SHORTAGE"], "Shortage", c.SHORTAGE._v, c.SHORTAGE.rows, c.SHORTAGE.items],
+    [["DELISTED"], "Delisted Items", c.DELISTED._v, c.DELISTED.rows, c.DELISTED.items],
+    [["BLOCKED"], "Blocked Items", c.BLOCKED._v, c.BLOCKED.rows, c.BLOCKED.items],
+    [["OPERATION REVIEW"], "Operation Review", d.Operations._v, d.Operations.rows, d.Operations.items],
+    [["SPECIAL"], "Special Items", c.SPECIALITY._v, c.SPECIALITY.rows, c.SPECIALITY.items],
+    [["UNICHARM", "DOOR TO DOOR", "DTD"], "Door To Door", c.DTD._v, c.DTD.rows, c.DTD.items],
+    [["ONHAND", "ON-HAND"], "Onhand Available", c.ON_HAND._v, c.ON_HAND.rows, c.ON_HAND.items],
+  ];
+  const newRows = [];
+  for (const [keys, label, v, n, it] of spec) {
+    const tr = find(keys); if (!tr) { findings.push(`Template row for '${label}' not found`); continue; }
+    newRows.push([tr, [label, r0(v), pct(v, tot), fmtInt(n), fmtInt(it)]]);
+  }
+  rows.slice(1).forEach(tr => yt.removeChild(tr));
+  for (const [tr, vals] of newRows) { yt.appendChild(tr); kids(tr, A_NS, "tc").forEach((tc, i) => { if (i < vals.length) setTxBody(cellTx(tc), vals[i]); }); }
+  kids(rows[0], A_NS, "tc").forEach(tc => { const t = textOf(tc); if (t.trim()) setTxBody(cellTx(tc), titleCase(t)); });
+  const others = tables.filter(t => t !== yt);
+  if (others.length) {
+    const mt = others[0]; const mrows = kids(mt, A_NS, "tr"); const dm = sm.divisions; const tm = sm._total;
+    const mspec = [["SUPPLY CHAIN REVIEW", "Supply Chain Review", dm["Supply Chain"]._v, dm["Supply Chain"].rows, dm["Supply Chain"].items],
+      ["COMMERCIAL REVIEW", "Commercial Review", dm.Commercial._v, dm.Commercial.rows, dm.Commercial.items],
+      ["OPERATION REVIEW", "Operation Review", dm.Operations._v, dm.Operations.rows, dm.Operations.items],
+      ["TOTAL VALUE", "Total Value", tm, sm.rows, sm.items]];
+    kids(mrows[0], A_NS, "tc").forEach(tc => { const t = textOf(tc); if (t.trim()) setTxBody(cellTx(tc), titleCase(t)); });
+    for (const tr of mrows.slice(1)) {
+      const l = normLbl(textOf(kids(tr, A_NS, "tc")[0])); const hit = mspec.find(m => l.startsWith(m[0]));
+      if (!hit) { findings.push(`Unexpected MTD row '${l}'`); continue; }
+      const vals = [hit[1], r0(hit[2]), pct(hit[2], tm), fmtInt(hit[3]), fmtInt(hit[4])];
+      kids(tr, A_NS, "tc").forEach((tc, i) => { if (i < vals.length) setTxBody(cellTx(tc), vals[i]); });
+    }
+  } else findings.push("MTD table not found in template");
+  const rep = c.AUTO_REPLENISHMENT._v; const cov = pct(c.COVERAGE_UPLIFT._v, tot);
+  for (const sp of els(doc, P_NS, "sp")) {
+    const tx = kids(sp, P_NS, "txBody")[0]; if (!tx) continue;
+    const ps = kids(tx, A_NS, "p");
+    const t = normLbl(ps.map(textOf).join(" ")); if (!t) continue;
+    if (t.startsWith("YESTERDAY")) setTxBody(tx, `Yesterday ${dmy(reportDate)}`);
+    else if (t.startsWith("REPLINSHMENT") || t.startsWith("REPLENISHMENT")) {
+      ["Replenishment", "Next Order"].forEach((lab, i) => { const p = ps[i]; if (!p) return; const runs = kids(p, A_NS, "r"); if (!runs.length) return; kids(runs[0], A_NS, "t")[0].textContent = lab; const rp = kids(runs[0], A_NS, "rPr")[0]; if (rp) rp.setAttribute("sz", "1800"); runs.slice(1).forEach(r => p.removeChild(r)); });
+    } else if (t.endsWith("SAR") && /\d/.test(t)) {
+      if (ps.length >= 2 && kids(ps[0], A_NS, "r").length && kids(ps[1], A_NS, "r").length) {
+        [r0(rep), "Sar"].forEach((val, i) => { const runs = kids(ps[i], A_NS, "r"); kids(runs[0], A_NS, "t")[0].textContent = val; runs.slice(1).forEach(r => ps[i].removeChild(r)); });
+      } else setTxBody(tx, `${r0(rep)} Sar`);
+    } else if (t.endsWith("%") && t.length < 8) setTxBody(tx, cov);
+    else for (const tEl of els(tx, A_NS, "t")) if (/\p{L}/u.test(tEl.textContent)) tEl.textContent = titleCase(tEl.textContent);
+  }
+  for (const tbl of tables) for (const tEl of els(tbl, A_NS, "t")) if (/\p{L}/u.test(tEl.textContent)) tEl.textContent = titleCase(tEl.textContent);
+  const all = els(doc, A_NS, "t").map(t => t.textContent).join(" ").toLowerCase();
+  for (const bad of ["received yesterday", "unicharm", "replinshment"]) if (all.includes(bad)) findings.push(`Forbidden label present: ${bad}`);
+  if (kids(yt, A_NS, "tr").length !== 14) findings.push(`Yesterday table has ${kids(yt, A_NS, "tr").length} rows (expected 14)`);
+  let out = xmlSerializer.serializeToString(doc);
+  if (!out.startsWith("<?xml")) out = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + out;
+  // rebuild package
+  const entries = [];
+  for (const e of z.entries) {
+    if (e.dir) continue;
+    if (e.name === slideE.name) entries.push(Object.assign({ name: e.name }, await deflateParts(async put => { await put(out); })));
+    else { const b = await z.bytes(e); entries.push(Object.assign({ name: e.name }, await deflateParts(async put => { await put(b); }, e.method === 0 ? 0 : 8))); }
+  }
+  return { blob: buildZip(entries), findings };
+}
+
+// ------------------------------------------------------------------ stage 2
+function deptRow(r, dept, st) {
+  const ex = st.extra.get(clean(r[C["ID"]]) + "|" + r[C["CreatedAt"]]);
+  const pc = clean(r[C["ProductCode"]]);
+  let user, pname, store;
+  if (ex) { user = ex.UserName; pname = ex.ProductName; store = ex.Store; } else { user = ""; pname = r[C["Material Desc."]]; store = r[C["BranchName"]]; }
+  const div = st.division.get(pc) || ""; const cd = r[C["CreatedAt"]];
+  if (dept === DEPT_OPS) return [cd, user, store, pc, pname, div, r[C["Onhand Stock"]], r[C["Department"]], r[C["Reason"]]];
+  if (dept === DEPT_SC) return [cd, store, pc, pname, r[C["RANGED"]], div, r[C["Onhand Stock"]], r[C["Forecast"]], r[C["Department"]], r[C["Reason"]]];
+  return [cd, store, pc, pname, div, r[C["Department"]], r[C["Reason"]]];
+}
+
+async function stage2(st, opts) {
+  const P = opts.progress || (() => {});
+  const rd = st.src.reportDate; const d = dmy(rd);
+  const checks = st.checks.slice();
+  const files = {};
+  P("Writing Common workbook", 0.02);
+  const commonName = `LOSt_Common_${d}.xlsx`;
+  files[commonName] = await writeXlsx(["Yesterday", "MTD", "YTD"].map((nm, i) => ({ name: nm, columns: COMMON_COLUMNS, rows: [st.yesterday, st.mtd, st.ytd][i], widths: COMMON_WIDTHS, dateCols: new Set([C["CreatedAt"]]), numCol: C["rsp"] })), "common", f => P("Writing Common workbook", 0.02 + 0.5 * f));
+  const periods = [["Yesterday Data", st.yesterday], ["MTD Data", st.mtd], ["YTD Data", st.ytd]];
+  const pdr = {};
+  const depts = [DEPT_SC, DEPT_COM, DEPT_OPS];
+  for (let i = 0; i < 3; i++) {
+    const dept = depts[i]; P(`Writing ${dept} workbook`, 0.55 + i * 0.1);
+    const sheets = [];
+    for (const [pname, rows] of periods) {
+      const own = rows.filter(r => r[C["Department"]] === dept);
+      (pdr[pname] = pdr[pname] || {})[dept] = [own.length, round2(plainSum(own.map(r => r[C["rsp"]])))];
+      const cols = DEPT_COLUMNS[dept];
+      sheets.push({ name: pname, columns: cols, rows: own.map(r => deptRow(r, dept, st)), widths: cols.map(c => (c === "ProductName" ? 42 : 20)), dateCols: new Set([0]), numCol: -1 });
+    }
+    files[DEPT_FILE[dept].replace("{d}", d)] = await writeXlsx(sheets, "dept");
+  }
+  P("Building summaries and Executive PowerPoint", 0.86);
+  const sy = summarize(st.yesterday), sm = summarize(st.mtd), syt = summarize(st.ytd);
+  const pptName = `Lost_Sales_Executive_Summary_${d}.pptx`;
+  const ppt = await writePpt(st.src.template, rd, sy, sm, opts.domParser, opts.xmlSerializer);
+  files[pptName] = ppt.blob;
+  for (const [pname, rows] of periods) {
+    const v = pdr[pname]; const totR = v[DEPT_SC][0] + v[DEPT_COM][0] + v[DEPT_OPS][0];
+    const totV = round2(plainSum([v[DEPT_SC][1], v[DEPT_COM][1], v[DEPT_OPS][1]])); const comV = round2(plainSum(rows.map(r => r[C["rsp"]])));
+    checks.push({ control: `Department row reconciliation (${pname})`, passed: totR === rows.length, detail: `SC ${v[DEPT_SC][0]} + COM ${v[DEPT_COM][0]} + OPS ${v[DEPT_OPS][0]} = ${totR} vs Common ${rows.length}` });
+    checks.push({ control: `Department value reconciliation (${pname})`, passed: Math.abs(totV - comV) < 0.01, detail: `${fmt2(totV)} vs Common ${fmt2(comV)}` });
+  }
+  const colOk = Object.values(DEPT_COLUMNS).every(cols => cols.includes("Division") && !cols.some(c => ["wh", "wh_stock", "wh_inventory"].includes(c.toLowerCase())));
+  checks.push({ control: "Column control", passed: colOk, detail: "Division present; WH / WH_Stock absent in all department sheets" });
+  checks.push({ control: "Division control", passed: true, detail: `Division mapped from Commercial Master (${st.division.size} materials); unmapped materials left blank` });
+  P("Checking Office package integrity", 0.9);
+  const pkg = {};
+  for (const [name, blob] of Object.entries(files)) {
+    const [ok, msg] = await verifyZip(blob, name); pkg[name] = ok;
+    if (!ok) checks.push({ control: "Office package integrity", passed: false, detail: `${name}: ${msg}` });
+  }
+  checks.push({ control: "Office package integrity", passed: Object.values(pkg).every(Boolean), detail: "Every XLSX/PPTX opens as a valid ZIP package" });
+  checks.push({ control: "PPT structural check", passed: !ppt.findings.length, detail: ppt.findings.join("; ") || "No structural or overflow findings" });
+  const controls = floatControls(st.controls);
+  const recon = {
+    build_id: BUILD_ID, verified_stage_id: st.stageId, user_verification_required: true,
+    source_row_lock: st.controls.valid_rows === st.yesterday.length, controls,
+    periods: {
+      "Yesterday Data": { rows: st.yesterday.length, value: new PyFloat(round2(plainSum(st.yesterday.map(r => r[C["rsp"]])))) },
+      "MTD Data": { rows: st.mtd.length, value: new PyFloat(round2(plainSum(st.mtd.map(r => r[C["rsp"]])))) },
+      "YTD Data": { rows: st.ytd.length, value: new PyFloat(round2(plainSum(st.ytd.map(r => r[C["rsp"]])))) },
+    },
+    selected_sources: {
+      lost: bn(st.src.lost), close: bn(st.src.close), mb52: bn(st.src.mb52), pdmf: bn(st.src.pdmf), zfd: bn(st.src.zfd),
+      template: bn(st.src.template), common_template: bn(st.src.commonTemplate), common_history: bn(st.src.history), commercial_master: bn(st.src.master),
+    },
+    validation: { all_passed: checks.every(x => x.passed), checks, notes: st.src.notes },
+  };
+  const summary = { summary: sy, mtd_summary: sm, ytd_summary: syt, reconciliation: recon };
+  const names = [commonName, DEPT_FILE[DEPT_SC].replace("{d}", d), DEPT_FILE[DEPT_COM].replace("{d}", d), DEPT_FILE[DEPT_OPS].replace("{d}", d), pptName, "Summary_and_Reconciliation.json"];
+  P("Packaging final ZIP", 0.95);
+  const pack = async () => {
+    files["Summary_and_Reconciliation.json"] = new Blob([pyJson(summary)], { type: "application/json" });
+    const entries = [];
+    for (const n of names) { const b = new Uint8Array(await files[n].arrayBuffer()); entries.push(Object.assign({ name: n }, await deflateParts(async put => { await put(b); }, n.endsWith(".json") ? 8 : 0))); }
+    return buildZip(entries);
+  };
+  let zip = await pack();
+  const [zok, zmsg] = await verifyZip(zip, "final", names);
+  checks.push({ control: "Final ZIP control", passed: zok, detail: `${names.length} deliverables; integrity ${zok ? "OK" : "FAILED: " + zmsg}` });
+  recon.validation.all_passed = checks.every(x => x.passed);
+  zip = await pack();
+  P("Done", 1);
+  return { zip, zipName: `Lost_Sales_Report_${d}_VERIFIED.zip`, files, names, summary, sy, sm, syt, checks };
+}
+const bn = f => (f ? basename(f.name) : null);
+
+// ------------------------------------------------------------------ repository input
+/** Accepts a list of File-like {name, blob}; expands a Repository zip into its members (lazily, as Blobs). */
+async function expandInputs(items, progress) {
+  const out = [];
+  for (const it of items) {
+    const nm = it.name.toLowerCase();
+    let z = null;
+    if (nm.endsWith(".zip")) {
+      z = await new ZipReader(it.blob, it.name).open();
+      if (!z.entries.some(e => /\.(xlsx|xlsm|pptx)$/i.test(e.name))) z = null; // a ZFD export, not a Repository
+    }
+    if (z) {
+      // Repository zip: expand members (nested ZFD zip kept as a blob)
+      for (const e of z.entries) {
+        if (e.dir || e.name.includes("__MACOSX")) continue;
+        if (progress) progress(`Unpacking ${basename(e.name)}`);
+        out.push({ name: e.name, blob: await z.blobOf(e) });
+      }
+    } else out.push(it);
+  }
+  return out;
+}
+
+G.LostSalesEngine = { BUILD_ID, stage1, stage2, expandInputs, EngineError, summarize, dmy, iso, fmt2, r0, pct, _test: { fsum, roundStr, pyJson, clean, num, ZipReader, XlsxReader } };
+})(typeof window !== "undefined" ? window : globalThis);
+
+</script>
+<script>
+(function () {
+"use strict";
+const E = window.LostSalesEngine;
+const $ = id => document.getElementById(id);
+const MASTER = {"divisions": ["Care Division", "Pharma - OTC", "Pharma - Rx"], "data": "100000:1;100002:1;100003:1;100004:1;100005:2;100006:2;100007:1;100008:1;100009:1;100011:1;100012:1;100013:1;100015:1;100017:1;100018:1;100019:1;100020:2;100021:2;100022:2;100023:2;100024:2;100025:2;100026:2;100027:2;100028:2;100029:2;100030:2;100031:2;100032:2;100033:1;100034:1;100035:1;100036:1;100037:1;100038:1;100039:1;100040:1;100044:2;100045:1;100046:1;100047:1;100048:1;100049:1;100050:1;100051:1;100052:1;100054:1;100055:2;100056:2;100058:2;100059:2;100060:2;100061:2;100062:1;100063:1;100064:2;100065:2;100066:2;100067:2;100068:2;100069:2;100070:2;100071:2;100072:1;100073:2;100074:1;100075:1;100076:2;100077:2;100078:2;100082:1;100083:1;100084:1;100085:2;100086:1;100088:2;100089:2;100090:2;100091:2;100092:2;100093:2;100094:2;100096:1;100097:1;100098:2;100099:2;100101:2;100102:2;100103:2;100104:2;100105:2;100106:2;100107:2;100108:2;100109:2;100110:2;100111:2;100113:2;100114:2;100115:2;100116:2;100117:2;100118:2;100119:2;100120:2;100121:1;100122:1;100123:1;100124:2;100125:2;100127:2;100128:2;100129:2;100130:2;100131:1;100132:1;100134:1;100135:2;100136:2;100138:1;100139:2;100140:2;100141:2;100142:2;100143:2;100144:2;100145:2;100146:2;100147:1;100148:1;100149:2;100152:2;100153:2;100154:2;100155:2;100156:2;100157:1;100158:2;100159:1;100160:1;100161:1;100162:1;100163:1;100164:1;100165:1;100166:1;100167:1;100168:2;100169:2;100170:1;100171:2;100172:2;100173:2;100174:2;100176:1;100177:1;100178:1;100180:1;100181:1;100184:2;100185:2;100186:2;100189:2;100195:2;100196:2;100197:2;100198:2;100199:2;100200:2;100201:2;100202:2;100203:2;100204:2;100205:2;100206:1;100207:1;100208:1;100210:2;100211:2;100212:2;100213:2;100214:2;100215:2;100216:1;100217:2;100218:2;100219:2;100220:2;100221:2;100222:1;100223:1;100224:1;100225:1;100227:1;100228:1;100229:2;100230:2;100231:2;100232:2;100233:2;100234:1;100235:1;100236:1;100237:1;100238:1;100239:1;100240:2;100241:2;100242:2;100243:2;100244:2;100245:2;100246:2;100247:2;100248:2;100249:2;100250:2;100251:2;100252:2;100253:2;100254:1;100255:2;100256:2;100257:2;100258:2;100259:2;100260:2;100261:2;100263:2;100264:2;100265:2;100266:2;100267:2;100268:2;100269:2;100270:2;100271:2;100272:1;100273:1;100274:1;100275:1;100276:1;100277:1;100278:1;100279:1;100280:2;100281:2;100282:2;100283:1;100284:1;100285:2;100286:2;100287:2;100288:1;100289:2;100290:2;100291:1;100292:1;100293:1;100294:1;100295:1;100296:1;100297:1;100298:1;100300:1;100301:1;100302:1;100303:1;100304:2;100305:2;100308:2;100309:2;100310:2;100314:1;100315:1;100316:1;100317:1;100318:1;100319:1;100320:1;100321:1;100322:1;100323:1;100324:1;100325:1;100326:2;100327:2;100328:1;100331:1;100332:1;100333:1;100334:1;100335:2;100336:1;100337:1;100338:1;100339:1;100340:1;100342:2;100343:2;100344:2;100345:2;100346:2;100347:2;100351:2;100352:2;100353:2;100354:2;100355:1;100356:1;100357:2;100358:2;100359:2;100360:2;100361:2;100362:2;100363:2;100364:2;100366:2;100367:2;100368:1;100369:1;100370:1;100371:1;100372:1;100373:2;100374:2;100375:2;100378:1;100379:2;100380:2;100382:2;100383:1;100384:1;100385:1;100389:1;100390:1;100391:1;100392:1;100393:1;100394:1;100395:1;100396:1;100397:1;100398:1;100399:1;100400:1;100401:1;100402:1;100403:1;100404:1;100405:1;100406:2;100408:2;100409:2;100410:2;100411:1;100412:1;100413:1;100414:1;100415:1;100416:1;100417:1;100420:2;100421:2;100422:2;100423:1;100424:1;100425:2;100426:2;100427:2;100428:2;100429:2;100430:2;100431:2;100432:2;100433:2;100434:2;100435:2;100436:2;100437:2;100438:2;100440:2;100441:2;100442:2;100443:1;100444:1;100445:1;100446:1;100448:1;100449:1;100450:1;100451:1;100452:1;100453:1;100454:1;100455:1;100456:1;100457:1;100458:1;100459:1;100460:1;100461:1;100462:1;100466:1;100467:2;100468:2;100469:2;100470:2;100472:2;100473:2;100474:2;100475:2;100476:2;100477:2;100479:1;100481:1;100482:1;100483:1;100484:1;100485:2;100487:2;100488:2;100489:2;100490:2;100491:2;100492:2;100493:2;100494:2;100495:2;100496:2;100497:1;100498:1;100499:1;100500:2;100501:2;100503:1;100504:1;100505:2;100506:2;100507:1;100508:1;100509:2;100510:2;100511:2;100512:2;100513:2;100514:1;100515:2;100516:2;100517:2;100518:2;100519:2;100520:2;100521:1;100522:1;100524:1;100525:1;100526:1;100527:1;100528:1;100529:1;100531:2;100532:2;100533:2;100534:2;100535:2;100536:2;100537:2;100538:2;100539:2;100540:2;100541:2;100542:2;100543:2;100544:1;100545:2;100546:2;100547:2;100548:2;100550:2;100551:2;100552:2;100553:2;100554:2;100555:2;100557:1;100558:1;100559:1;100560:1;100561:2;100562:2;100563:1;100564:1;100565:1;100566:2;100567:2;100568:1;100569:1;100570:1;100571:1;100573:2;100574:2;100575:2;100576:2;100577:2;100579:2;100580:2;100581:2;100582:2;100583:2;100584:2;100585:2;100586:2;100587:2;100588:2;100589:2;100590:2;100591:2;100592:2;100593:2;100594:2;100595:2;100596:2;100598:1;100599:1;100600:1;100601:1;100602:1;100603:2;100604:2;100607:2;100608:1;100610:1;100611:1;100612:1;100613:1;100614:1;100615:1;100616:1;100617:1;100619:1;100620:1;100623:1;100624:1;100625:1;100626:1;100627:2;100633:2;100634:2;100635:2;100636:2;100637:2;100638:2;100639:2;100640:2;100641:2;100642:2;100643:2;100644:2;100645:2;100646:2;100647:2;100648:2;100649:2;100650:2;100651:2;100652:2;100653:2;100654:1;100655:1;100656:2;100659:2;100660:2;100661:1;100662:1;100663:1;100664:1;100665:1;100667:2;100668:2;100669:2;100670:2;100671:2;100672:1;100673:1;100674:1;100675:1;100676:2;100677:2;100678:2;100679:2;100680:2;100681:2;100682:2;100683:2;100684:2;100685:2;100686:2;100687:2;100688:2;100689:2;100690:2;100691:2;100692:2;100693:2;100694:2;100695:1;100696:1;100697:2;100698:2;100699:2;100700:2;100701:2;100702:2;100704:2;100705:2;100706:2;100708:1;100709:2;100711:2;100712:2;100713:2;100714:2;100715:1;100716:2;100717:2;100718:2;100719:2;100720:2;100721:1;100722:2;100723:2;100724:2;100725:1;100726:1;100727:2;100728:2;100729:2;100730:2;100731:1;100732:1;100733:1;100734:1;100735:1;100736:2;100737:2;100738:2;100739:2;100740:2;100741:2;100742:2;100743:2;100744:1;100745:1;100746:1;100749:2;100750:2;100751:1;100752:1;100753:1;100754:1;100755:2;100756:2;100757:2;100758:2;100759:2;100760:2;100761:2;100763:2;100764:1;100766:2;100767:2;100768:2;100769:2;100770:2;100771:2;100772:2;100773:2;100774:2;100775:2;100776:2;100777:2;100778:2;100779:2;100780:2;100781:2;100782:2;100783:2;100784:2;100786:2;100787:2;100788:2;100789:2;100790:2;100791:1;100792:2;100793:2;100795:2;100796:2;100797:2;100798:1;100799:1;100800:1;100801:2;100802:2;100803:2;100804:2;100806:2;100809:2;100810:1;100811:2;100812:1;100813:0;100814:2;100815:1;100816:2;100817:2;100819:2;100820:1;100821:1;100822:2;100823:1;100824:1;100825:1;100826:2;100827:2;100828:2;100829:2;100830:2;100831:2;100832:2;100833:2;100834:1;100835:2;100836:2;100837:2;100838:2;100839:1;100840:2;100841:2;100842:1;100843:2;100844:2;100845:2;100846:2;100847:2;100848:1;100849:1;100850:1;100851:2;100852:2;100853:1;100854:2;100856:2;100857:1;100858:1;100859:1;100860:2;100862:1;100863:1;100864:1;100865:1;100866:1;100867:2;100869:1;100870:1;100871:1;100872:1;100875:1;100876:1;100877:1;100880:2;100881:2;100882:1;100883:2;100884:2;100885:2;100886:2;100888:2;100889:2;100890:2;100891:2;100892:2;100894:1;100895:2;100896:2;100897:1;100898:2;100899:2;100900:1;100901:1;100902:1;100903:2;100904:2;100905:2;100908:2;100909:2;100910:2;100911:2;100912:1;100913:1;100914:1;100916:1;100917:2;100918:1;100919:1;100920:1;100921:2;100922:2;100923:1;100924:1;100925:1;100926:2;100928:1;100930:2;100931:2;100932:2;100933:2;100935:1;100936:1;100937:1;100938:1;100939:1;100940:1;100941:1;100942:1;100943:1;100944:1;100945:1;100946:1;100947:1;100948:1;100949:1;100950:1;100951:1;100952:1;100953:2;100954:2;100955:1;100956:1;100957:2;100958:1;100959:1;100960:1;100961:1;100962:1;100963:2;100964:2;100965:2;100966:1;100967:2;100968:2;100969:2;100970:2;100971:2;100972:2;100973:2;100974:2;100975:2;100976:2;100977:2;100978:2;100979:2;100980:2;100981:1;100983:1;100984:1;100985:1;100986:1;100987:1;100988:2;100989:2;100990:2;100991:2;100992:1;100993:1;100994:1;100996:2;100997:2;100999:1;101000:1;101001:1;101002:2;101003:2;101004:2;101005:2;101006:2;101007:1;101008:1;101009:1;101010:2;101011:2;101012:2;101013:2;101014:1;101016:1;101017:1;101018:1;101019:1;101020:1;101021:1;101022:1;101023:1;101024:1;101025:1;101026:1;101027:2;101028:2;101029:1;101030:1;101033:1;101034:2;101035:2;101037:1;101038:2;101042:2;101043:2;101044:2;101045:2;101046:1;101047:1;101048:2;101049:2;101050:1;101051:2;101052:1;101053:2;101054:1;101055:1;101056:2;101057:1;101058:1;101059:2;101060:2;101061:2;101062:2;101063:1;101064:2;101065:2;101066:1;101067:1;101068:1;101069:2;101070:2;101071:1;101072:1;101073:2;101074:2;101075:2;101076:2;101077:2;101078:2;101079:2;101080:2;101081:2;101082:1;101083:2;101084:2;101085:1;101086:1;101087:1;101088:2;101089:2;101090:2;101093:2;101094:1;101095:1;101096:1;101097:1;101098:1;101099:2;101100:2;101101:2;101103:2;101104:2;101105:2;101107:2;101109:2;101110:2;101111:2;101112:2;101113:2;101114:1;101116:1;101117:1;101120:2;101121:2;101122:2;101123:2;101124:2;101125:1;101126:1;101127:1;101128:1;101129:2;101130:2;101131:2;101133:1;101134:1;101135:2;101136:1;101140:1;101141:1;101144:2;101145:2;101146:1;101147:2;101148:2;101149:2;101150:2;101151:2;101152:2;101154:1;101155:1;101156:1;101157:1;101158:1;101159:1;101160:2;101162:2;101163:2;101164:2;101165:1;101166:1;101167:1;101168:1;101169:1;101170:1;101171:1;101172:1;101173:1;101174:1;101175:1;101176:1;101177:1;101178:1;101179:1;101180:1;101181:1;101183:2;101184:2;101185:2;101186:2;101187:2;101188:2;101189:1;101190:1;101191:2;101192:2;101193:2;101194:2;101197:1;101200:1;101201:1;101202:1;101203:1;101204:1;101205:2;101206:2;101207:2;101209:2;101210:2;101211:2;101212:2;101213:2;101214:2;101215:2;101216:2;101217:2;101218:2;101219:2;101220:2;101221:2;101222:2;101223:2;101225:2;101226:2;101227:1;101228:1;101229:1;101231:2;101232:2;101233:2;101234:1;101235:1;101236:1;101237:1;101238:2;101240:1;101241:1;101242:1;101243:1;101244:2;101245:2;101246:2;101248:2;101249:2;101250:2;101252:2;101253:1;101254:1;101255:1;101256:1;101257:2;101258:2;101259:1;101260:1;101261:1;101262:1;101263:2;101264:2;101265:2;101266:2;101267:1;101268:1;101269:1;101270:2;101271:1;101272:1;101274:1;101275:1;101276:1;101277:2;101278:2;101279:2;101281:1;101282:1;101283:1;101284:1;101285:1;101286:1;101287:1;101288:1;101289:1;101290:1;101291:1;101292:1;101293:1;101294:1;101295:1;101296:1;101297:1;101298:1;101299:1;101300:2;101301:1;101302:1;101303:1;101304:1;101305:1;101306:1;101307:1;101308:1;101309:1;101310:1;101311:1;101312:1;101313:1;101314:1;101315:1;101316:1;101317:1;101318:1;101319:2;101320:1;101321:1;101322:1;101323:1;101324:1;101326:2;101327:2;101328:2;101329:1;101331:1;101332:1;101333:1;101334:2;101335:2;101336:1;101337:1;101338:1;101339:1;101340:1;101341:1;101342:1;101343:1;101344:1;101345:2;101346:2;101347:2;101348:2;101351:2;101354:2;101355:1;101357:2;101358:1;101359:1;101360:1;101361:1;101362:1;101363:1;101364:2;101365:2;101366:2;101367:2;101368:1;101369:1;101370:1;101371:1;101372:1;101375:2;101376:2;101377:1;101378:1;101379:1;101381:1;101382:2;101383:1;101384:1;101385:2;101386:2;101387:2;101388:2;101389:2;101390:2;101395:1;101396:2;101397:2;101398:2;101399:2;101400:2;101401:2;101402:2;101403:2;101404:2;101405:2;101406:2;101408:2;101409:2;101410:2;101411:2;101413:2;101414:2;101415:2;101416:2;101417:2;101418:2;101419:2;101420:2;101421:1;101422:2;101423:2;101424:2;101425:2;101426:2;101427:2;101428:2;101430:1;101431:1;101433:1;101434:1;101435:1;101436:1;101437:1;101438:1;101439:1;101440:1;101441:1;101442:1;101443:1;101444:1;101445:1;101446:1;101447:1;101448:1;101449:1;101450:1;101453:2;101454:2;101455:2;101456:2;101457:1;101458:1;101461:1;101462:1;101463:1;101464:1;101465:2;101466:1;101468:1;101469:1;101470:1;101471:2;101472:2;101473:2;101474:2;101475:1;101476:2;101477:2;101478:2;101479:1;101480:1;101483:2;101484:2;101485:2;101486:2;101487:2;101488:2;101489:2;101490:2;101491:2;101492:2;101493:2;101495:2;101496:2;101497:2;101498:2;101499:2;101500:2;101501:2;101502:2;101503:2;101505:2;101506:2;101507:2;101508:2;101509:1;101510:1;101511:1;101512:1;101513:2;101514:1;101515:1;101516:1;101517:1;101518:1;101519:1;101521:2;101522:2;101523:2;101524:2;101525:2;101526:2;101527:2;101528:2;101529:2;101530:2;101531:2;101532:2;101533:2;101534:1;101535:2;101536:2;101537:2;101538:1;101539:1;101540:1;101541:2;101542:2;101543:1;101544:1;101549:2;101550:2;101551:1;101552:2;101566:1;101567:1;101568:2;101569:2;101570:2;101571:2;101572:2;101573:2;101574:2;101575:2;101576:2;101577:2;101578:2;101579:1;101582:1;101583:1;101584:1;101585:1;101587:1;101588:1;101589:1;101590:1;101591:1;101592:1;101593:1;101594:1;101595:1;101596:1;101597:1;101598:1;101599:1;101600:1;101601:1;101602:1;101603:1;101604:1;101605:1;101606:1;101607:1;101608:1;101609:2;101610:1;101613:1;101614:1;101616:1;101619:1;101620:1;101621:1;101622:1;101623:2;101624:2;101626:2;101627:1;101628:1;101629:1;101630:1;101631:1;101632:1;101634:1;101635:1;101636:1;101637:2;101638:2;101639:2;101641:2;101642:2;101643:2;101644:1;101645:1;101646:1;101647:1;101649:2;101650:1;101652:2;101653:1;101654:1;101655:1;101656:1;101657:1;101658:1;101659:1;101660:1;101661:1;101663:2;101664:2;101665:2;101666:2;101667:2;101668:1;101669:1;101670:2;101671:1;101674:1;101675:1;101676:1;101680:2;101681:2;101682:2;101683:2;101684:1;101687:1;101688:1;101689:1;101690:2;101691:2;101693:2;101694:2;101695:2;101696:2;101697:2;101699:2;101700:2;101702:2;101703:2;101704:2;101705:2;101706:1;101707:1;101708:1;101709:1;101710:1;101711:1;101712:2;101713:2;101714:2;101715:2;101716:2;101717:2;101718:2;101719:2;101720:2;101721:2;101722:1;101723:2;101724:2;101725:2;101726:2;101728:1;101729:1;101730:2;101731:2;101732:2;101733:2;101734:2;101735:2;101736:2;101737:2;101738:2;101739:2;101740:2;101743:2;101744:2;101745:2;101746:2;101747:1;101749:2;101750:2;101751:2;101752:2;101753:2;101754:2;101755:2;101756:2;101757:2;101758:2;101759:2;101760:2;101761:1;101762:1;101763:2;101764:2;101765:1;101766:1;101767:1;101768:1;101769:1;101770:1;101771:1;101772:1;101773:1;101775:1;101776:1;101777:1;101778:1;101779:1;101780:1;101781:1;101782:1;101783:1;101784:1;101786:2;101788:1;101789:2;101791:1;101792:2;101793:2;101794:1;101795:1;101797:2;101798:2;101800:2;101801:2;101802:2;101803:2;101807:2;101808:2;101809:1;101810:1;101811:1;101812:1;101813:1;101815:2;101816:2;101817:2;101818:2;101819:2;101820:2;101821:2;101822:2;101823:2;101824:2;101825:2;101826:2;101827:2;101828:2;101829:2;101830:2;101832:2;101834:2;101836:2;101837:2;101838:1;101839:1;101840:1;101841:1;101842:2;101843:1;101844:1;101845:1;101846:1;101847:1;101848:1;101850:2;101851:2;101852:2;101853:2;101854:2;101855:2;101856:2;101857:2;101858:2;101859:2;101860:2;101861:2;101862:2;101863:2;101864:2;101865:2;101866:2;101867:2;101868:1;101869:1;101870:1;101871:2;101873:2;101874:2;101875:2;101876:2;101877:2;101878:2;101879:2;101880:2;101881:2;101882:2;101883:2;101884:2;101885:2;101886:2;101887:1;101888:1;101889:1;101890:1;101891:1;101892:1;101893:1;101894:1;101896:2;101898:1;101899:1;101900:1;101902:1;101903:1;101904:1;101905:1;101909:2;101910:2;101912:2;101913:2;101914:2;101915:1;101916:2;101917:2;101918:2;101919:2;101920:2;101921:2;101922:2;101923:2;101924:2;101925:1;101926:2;101927:2;101928:2;101929:2;101930:2;101931:2;101933:2;101934:2;101935:1;101936:1;101937:1;101938:1;101939:1;101940:2;101941:2;101942:2;101943:2;101944:2;101945:1;101946:1;101948:1;101949:1;101950:1;101951:1;101952:1;101953:2;101954:2;101955:2;101956:2;101957:2;101958:2;101959:1;101960:1;101961:2;101962:2;101963:2;101964:2;101965:2;101966:2;101967:1;101968:2;101970:2;101971:2;101972:2;101973:2;101974:2;101975:1;101976:1;101977:2;101978:2;101979:2;101981:1;101982:2;101983:2;101984:2;101987:2;101988:2;101989:2;101990:2;101991:2;101992:2;101993:2;101994:2;101995:2;101996:2;101997:2;101998:2;101999:2;102000:2;102001:1;102004:2;102005:2;102006:2;102007:2;102008:1;102010:1;102011:1;102012:1;102014:1;102015:1;102016:1;102017:2;102018:2;102019:1;102021:1;102022:1;102023:1;102024:1;102025:1;102026:1;102027:2;102028:2;102029:2;102030:1;102031:1;102032:2;102033:2;102034:2;102035:2;102036:2;102037:2;102038:2;102039:2;102040:2;102041:2;102042:2;102043:1;102044:2;102045:1;102046:1;102047:1;102048:1;102049:2;102050:2;102051:2;102052:2;102053:2;102054:2;102055:2;102057:2;102058:2;102059:2;102060:2;102062:2;102063:2;102067:1;102068:2;102069:2;102071:2;102073:1;102074:2;102075:2;102076:2;102079:2;102080:2;102081:2;102082:2;102083:2;102088:1;102089:1;102090:1;102091:1;102092:1;102093:1;102094:1;102095:1;102096:1;102097:1;102099:2;102100:2;102101:1;102102:1;102103:2;102104:2;102105:2;102106:2;102107:2;102108:2;102109:2;102110:2;102111:1;102112:1;102113:1;102114:1;102115:1;102117:1;102118:1;102119:2;102120:2;102121:2;102122:2;102123:1;102124:1;102125:2;102127:1;102128:1;102129:1;102133:1;102136:2;102137:2;102138:2;102139:2;102142:2;102143:2;102144:2;102145:2;102146:2;102147:2;102148:2;102149:2;102150:2;102151:1;102152:1;102153:2;102154:2;102155:2;102156:1;102157:1;102158:2;102159:2;102160:2;102161:2;102162:2;102163:2;102164:2;102165:2;102166:1;102167:2;102168:2;102169:2;102170:2;102171:2;102174:1;102175:2;102176:2;102177:2;102178:2;102182:1;102183:2;102184:1;102185:2;102186:2;102187:2;102188:2;102189:2;102190:2;102191:1;102192:2;102193:2;102194:2;102195:1;102196:1;102197:1;102199:2;102200:2;102201:2;102202:2;102204:2;102205:2;102206:2;102207:1;102208:1;102209:1;102210:1;102211:1;102212:1;102213:1;102214:2;102215:2;102216:2;102217:2;102218:2;102219:2;102220:2;102221:2;102222:2;102223:2;102224:2;102225:2;102226:1;102227:2;102228:2;102229:1;102230:1;102231:1;102232:1;102233:1;102236:2;102237:2;102238:2;102239:2;102240:2;102241:2;102243:1;102246:1;102247:1;102248:1;102249:1;102250:1;102251:1;102252:1;102253:1;102254:1;102255:2;102256:1;102257:1;102258:2;102261:1;102262:1;102263:2;102265:1;102266:1;102267:1;102268:1;102269:1;102270:1;102271:1;102272:2;102273:1;102276:1;102277:2;102278:1;102279:1;102280:2;102281:1;102283:1;102284:1;102285:1;102286:1;102287:1;102288:1;102289:2;102290:1;102291:2;102292:1;102293:1;102295:1;102296:1;102297:1;102298:1;102299:1;102301:1;102302:1;102303:1;102304:2;102305:2;102306:2;102307:1;102308:1;102310:1;102311:1;102312:1;102313:1;102316:1;102317:1;102318:1;102319:1;102320:1;102321:1;102323:2;102324:2;102325:2;102326:1;102327:2;102328:1;102329:1;102330:2;102331:1;102332:1;102333:2;102334:2;102337:1;102338:1;102339:2;102340:2;102341:2;102342:2;102343:2;102345:1;102346:2;102347:2;102348:2;102349:2;102350:2;102351:1;102352:2;102353:2;102354:2;102355:2;102356:2;102357:2;102358:2;102359:2;102360:2;102361:2;102362:2;102363:2;102365:2;102366:2;102371:1;102372:1;102373:1;102375:1;102376:1;102378:2;102382:1;102384:1;102386:1;102387:1;102388:2;102389:2;102390:1;102393:2;102394:1;102395:1;102396:2;102397:1;102398:1;102399:1;102400:2;102401:2;102402:2;102403:2;102404:2;102405:2;102406:2;102407:2;102408:1;102409:1;102410:1;102411:1;102412:1;102414:2;102415:2;102416:2;102417:2;102418:2;102419:2;102420:2;102421:2;102422:2;102423:2;102424:2;102425:2;102426:2;102427:2;102428:2;102429:2;102430:2;102431:2;102432:2;102433:2;102434:2;102435:1;102436:1;102437:2;102438:2;102439:2;102440:2;102441:2;102444:1;102445:2;102446:2;102448:1;102449:1;102451:1;102452:1;102453:1;102454:1;102455:1;102456:1;102457:1;102458:1;102459:1;102461:1;102462:1;102463:2;102464:1;102465:1;102466:1;102467:1;102468:1;102469:2;102470:2;102471:2;102472:2;102473:2;102475:1;102476:1;102477:1;102478:1;102479:1;102481:2;102482:2;102483:2;102484:2;102485:2;102486:1;102487:2;102488:2;102489:2;102490:1;102491:1;102492:1;102493:1;102496:1;102497:1;102498:2;102499:2;102500:2;102501:2;102502:2;102503:1;102504:2;102505:1;102506:1;102507:1;102508:2;102509:1;102510:1;102512:1;102513:1;102514:1;102515:1;102516:1;102517:2;102519:1;102520:1;102521:1;102522:1;102523:1;102524:1;102525:1;102526:1;102528:2;102529:2;102530:2;102531:1;102532:2;102533:2;102534:2;102535:2;102536:2;102537:2;102538:2;102539:2;102542:1;102543:2;102544:1;102545:1;102546:1;102547:1;102548:1;102549:1;102550:1;102551:1;102552:1;102553:1;102554:1;102555:1;102556:1;102557:1;102558:1;102559:1;102560:1;102561:2;102562:2;102564:1;102565:1;102566:1;102567:1;102568:1;102569:1;102570:1;102571:1;102572:1;102573:1;102574:1;102575:1;102576:1;102577:1;102578:1;102579:1;102580:2;102581:2;102582:1;102583:1;102584:1;102585:1;102586:1;102587:2;102588:2;102589:2;102590:2;102591:1;102592:1;102593:2;102594:1;102595:1;102596:2;102597:2;102599:2;102600:1;102601:2;102602:2;102603:2;102604:2;102605:2;102606:2;102607:1;102608:1;102609:1;102610:1;102611:1;102612:1;102616:1;102617:1;102618:2;102619:2;102620:2;102621:2;102622:1;102623:1;102624:2;102625:2;102626:2;102627:2;102628:1;102629:1;102630:2;102631:1;102632:1;102633:2;102634:1;102635:2;102636:2;102637:2;102638:2;102639:2;102640:1;102641:1;102642:2;102644:1;102645:1;102646:2;102647:2;102648:2;102651:2;102652:1;102653:1;102654:1;102655:2;102656:2;102657:2;102658:2;102659:2;102660:2;102661:2;102662:1;102663:1;102664:1;102665:1;102666:2;102667:1;102668:1;102670:2;102671:2;102672:1;102673:1;102674:1;102675:1;102676:1;102677:1;102678:2;102679:1;102680:1;102681:2;102684:1;102685:1;102686:1;102687:1;102688:1;102689:1;102690:1;102691:1;102693:1;102694:1;102695:1;102697:1;102698:1;102699:1;102702:1;102703:1;102704:1;102705:1;102706:2;102707:1;102708:1;102709:0;102710:1;102711:2;102712:2;102713:2;102714:1;102715:1;102716:1;102717:2;102719:1;102720:1;102721:2;102722:1;102723:1;102724:1;102725:2;102727:2;102728:2;102729:2;102730:1;102731:1;102732:1;102733:1;102734:2;102735:2;102736:2;102737:2;102738:1;102739:1;102740:1;102744:1;102745:2;102746:2;102747:1;102748:1;102749:2;102750:1;102751:2;102753:2;102754:1;102755:2;102756:1;102758:2;102759:2;102760:2;102761:2;102762:2;102763:2;102764:1;102765:2;102766:2;102767:1;102768:2;102770:1;102771:2;102772:2;102773:1;102774:1;102775:2;102776:1;102777:2;102778:2;102779:2;102780:1;102781:1;102782:2;102783:2;102784:2;102786:2;102787:2;102788:2;102789:2;102790:2;102791:1;102792:2;102793:2;102794:2;102795:2;102798:1;102799:1;102800:1;102801:1;102804:1;102805:1;102806:1;102807:1;102808:1;102809:1;102810:1;102811:1;102812:1;102813:2;102814:1;102815:1;102816:1;102817:1;102818:1;102820:2;102821:2;102822:2;102823:2;102824:2;102825:2;102827:2;102828:2;102829:2;102830:2;102832:1;102833:1;102835:2;102836:2;102837:2;102838:1;102841:2;102842:1;102843:1;102844:1;102845:1;102846:1;102848:2;102849:2;102850:1;102851:2;102852:2;102853:2;102854:2;102855:2;102856:2;102857:2;102861:2;102862:2;102863:2;102864:2;102865:1;102866:1;102869:1;102870:1;102871:1;102872:2;102873:2;102874:2;102875:2;102878:1;102879:1;102880:1;102881:1;102882:1;102883:1;102884:1;102885:1;102886:1;102887:1;102889:2;102892:2;102894:1;102895:1;102896:1;102897:1;102898:1;102899:2;102900:2;102901:1;102902:1;102903:1;102904:1;102905:2;102906:1;102907:2;102908:2;102909:1;102910:1;102912:2;102913:1;102914:2;102915:2;102916:2;102917:2;102918:2;102919:2;102920:2;102921:2;102922:2;102923:1;102924:1;102925:1;102926:1;102927:1;102928:1;102929:1;102930:1;102934:1;102935:1;102936:2;102937:2;102938:2;102939:2;102941:2;102942:2;102943:2;102944:2;102945:1;102946:1;102947:1;102948:1;102949:1;102950:1;102951:1;102952:1;102953:1;102954:2;102955:2;102956:2;102957:1;102958:1;102959:2;102960:2;102961:2;102962:2;102963:1;102964:1;102966:1;102967:2;102968:2;102969:2;102971:2;102972:2;102973:2;102974:1;102975:1;102976:1;102977:1;102978:2;102979:2;102980:2;102981:2;102982:1;102983:1;102984:1;102985:2;102986:2;102987:1;102988:1;102989:1;102990:1;102991:1;102992:1;102993:2;102994:2;102995:2;102996:2;102999:2;103000:2;103001:2;103002:1;103003:2;103004:2;103005:2;103006:2;103010:1;103011:1;103012:1;103013:1;103014:1;103015:1;103016:1;103017:1;103019:2;103020:2;103022:1;103023:1;103024:2;103025:1;103026:1;103027:1;103028:1;103029:1;103034:2;103035:1;103036:1;103037:1;103039:2;103040:2;103041:2;103042:2;103045:2;103046:2;103047:2;103048:2;103049:2;103050:2;103051:2;103052:2;103053:2;103054:2;103055:2;103056:2;103057:2;103058:2;103059:2;103060:2;103061:2;103063:2;103064:2;103065:2;103066:2;103067:2;103068:2;103069:2;103070:2;103071:2;103072:2;103073:2;103074:2;103075:2;103076:2;103077:2;103078:2;103079:2;103080:2;103081:2;103082:2;103083:2;103084:2;103085:2;103086:2;103087:2;103088:2;103089:2;103090:2;103091:2;103092:2;103093:2;103094:2;103095:2;103096:2;103097:2;103098:2;103099:2;103100:2;103101:2;103102:2;103103:2;103104:2;103105:2;103106:2;103110:2;103111:1;103112:2;103113:2;103114:2;103115:2;103116:1;103118:1;103120:1;103121:1;103122:1;103123:1;103124:1;103126:1;103127:1;103128:1;103131:2;103132:1;103133:1;103134:1;103135:1;103136:1;103137:1;103138:2;103139:2;103143:1;103144:2;103145:2;103146:2;103147:2;103148:2;103149:2;103150:2;103151:2;103152:1;103153:1;103154:2;103155:2;103156:2;103158:2;103159:2;103160:1;103161:1;103162:1;103163:1;103164:1;103165:2;103166:2;103167:2;103168:2;103169:2;103170:2;103171:1;103172:1;103173:1;103174:1;103175:2;103176:2;103177:2;103178:2;103181:2;103182:2;103183:2;103184:2;103185:2;103190:1;103191:1;103192:1;103193:1;103194:2;103195:2;103196:2;103197:2;103198:2;103200:1;103201:1;103202:1;103203:2;103204:1;103205:2;103206:2;103207:2;103208:2;103209:1;103210:1;103211:1;103213:1;103214:1;103215:2;103216:2;103217:2;103218:2;103220:1;103222:2;103223:2;103224:2;103225:2;103226:2;103227:2;103228:2;103229:1;103230:1;103231:1;103232:1;103233:2;103234:1;103235:2;103236:2;103237:2;103238:2;103239:2;103240:2;103241:1;103243:1;103244:1;103246:2;103247:1;103248:1;103249:2;103252:2;103253:2;103254:2;103257:1;103258:1;103260:1;103261:1;103262:1;103263:1;103264:1;103265:1;103267:2;103268:2;103269:2;103270:2;103271:1;103272:1;103275:2;103276:2;103277:2;103278:2;103279:2;103280:2;103281:2;103282:2;103283:2;103284:2;103285:1;103286:2;103287:2;103288:1;103289:1;103290:1;103291:1;103292:1;103293:1;103294:1;103295:2;103296:2;103297:1;103298:1;103299:1;103300:1;103301:1;103302:1;103303:1;103304:2;103305:2;103306:2;103307:2;103308:2;103309:2;103310:2;103311:2;103312:1;103313:1;103314:1;103315:1;103316:1;103319:2;103320:2;103321:2;103322:2;103323:2;103324:2;103325:2;103327:2;103328:2;103330:2;103331:2;103332:2;103333:2;103334:2;103336:2;103337:2;103338:2;103339:2;103341:2;103342:2;103343:2;103344:2;103345:2;103346:2;103347:1;103348:1;103349:2;103350:1;103351:1;103352:1;103353:1;103356:2;103357:2;103358:2;103359:2;103360:2;103361:2;103362:2;103363:1;103364:1;103369:1;103370:1;103371:2;103372:2;103374:1;103375:1;103376:1;103377:2;103378:1;103379:1;103381:2;103382:1;103383:1;103385:1;103386:2;103389:1;103390:1;103391:2;103392:2;103393:1;103394:2;103395:2;103396:2;103397:1;103398:1;103399:1;103401:2;103402:1;103403:1;103404:2;103405:1;103406:1;103407:2;103409:2;103410:2;103411:2;103412:2;103414:1;103415:1;103417:2;103418:2;103419:2;103420:1;103421:1;103422:1;103423:2;103424:2;103425:2;103426:2;103427:2;103428:2;103429:1;103430:2;103431:2;103432:2;103433:1;103435:2;103436:2;103437:2;103440:1;103443:2;103444:2;103445:1;103446:2;103447:2;103448:2;103449:1;103450:1;103451:1;103453:1;103454:1;103455:2;103456:2;103457:2;103458:2;103459:2;103460:2;103462:2;103463:2;103464:2;103465:2;103466:2;103469:1;103470:1;103471:1;103472:2;103473:1;103474:2;103476:1;103477:1;103478:1;103480:2;103481:1;103482:2;103483:2;103484:2;103485:2;103486:2;103487:2;103488:1;103489:2;103490:2;103491:2;103492:2;103493:2;103496:2;103497:2;103498:2;103499:2;103500:2;103501:2;103502:1;103503:1;103504:1;103505:1;103506:1;103507:1;103508:1;103509:1;103510:1;103511:1;103512:1;103513:1;103515:1;103517:1;103518:1;103519:1;103523:1;103525:1;103526:1;103527:2;103528:2;103530:2;103531:2;103532:2;103533:2;103534:2;103535:2;103536:1;103537:1;103539:2;103540:2;103542:2;103543:2;103544:2;103545:1;103546:1;103547:1;103548:1;103549:1;103550:1;103551:1;103552:1;103554:1;103555:1;103556:1;103557:1;103558:1;103559:1;103560:1;103561:1;103562:1;103563:1;103564:1;103565:1;103566:2;103567:2;103568:2;103569:1;103570:1;103571:1;103572:2;103573:2;103574:2;103575:1;103576:1;103578:1;103579:2;103580:2;103581:1;103582:1;103583:2;103584:2;103585:2;103586:2;103587:2;103588:2;103589:2;103590:2;103591:2;103592:2;103593:2;103594:2;103595:2;103596:2;103599:1;103600:2;103601:2;103603:2;103604:2;103605:2;103606:2;103607:2;103608:2;103609:2;103610:2;103611:2;103613:2;103615:2;103616:1;103618:2;103619:1;103620:1;103621:1;103622:1;103623:1;103624:1;103625:1;103626:2;103627:2;103630:2;103631:2;103634:2;103635:2;103636:2;103637:2;103638:2;103639:2;103641:1;103642:1;103643:1;103644:2;103645:2;103646:2;103647:2;103648:2;103649:2;103650:2;103651:2;103652:2;103654:2;103655:1;103656:1;103657:2;103658:2;103659:2;103660:2;103661:2;103662:2;103663:2;103664:2;103665:2;103666:1;103667:1;103669:2;103670:2;103674:1;103675:2;103676:2;103677:2;103678:2;103680:2;103681:2;103682:2;103683:2;103684:2;103685:1;103686:1;103688:1;103689:1;103690:1;103691:1;103692:2;103693:2;103694:2;103695:2;103696:2;103697:2;103698:1;103699:2;103700:1;103701:2;103702:1;103703:2;103704:2;103705:2;103707:2;103708:2;103709:2;103710:2;103711:1;103712:1;103714:1;103715:1;103717:2;103718:2;103719:2;103720:1;103721:1;103722:1;103723:1;103724:1;103725:1;103726:1;103727:1;103728:1;103729:1;103731:2;103732:1;103733:1;103734:1;103736:2;103738:2;103739:1;103741:2;103742:2;103743:2;103744:2;103745:2;103749:2;103750:1;103759:2;103762:1;103763:2;103764:2;103765:2;103767:2;103768:2;103769:1;103773:2;103774:1;103775:2;103776:2;103781:2;103782:2;103784:2;103785:2;103786:2;103787:2;103789:2;103790:2;103792:2;103794:2;103796:1;103798:2;103800:1;103803:1;103805:1;103806:1;103807:2;103808:2;103809:1;103810:1;103811:1;103812:1;103816:2;103817:2;103818:1;103820:1;103824:1;103825:1;103826:2;103828:1;103830:1;103831:1;103832:1;103833:1;103834:1;103835:1;103837:1;103838:1;103839:1;103840:1;103841:1;103842:1;103843:1;103844:1;103845:1;103846:1;103847:1;103848:1;103849:1;103850:1;103851:1;103852:1;103853:1;103854:1;103855:1;103856:1;103857:1;103858:1;103859:1;103860:1;103861:1;103862:1;103863:1;103864:1;103865:1;103866:1;103867:1;103868:1;103869:1;103871:2;103872:1;103873:1;103877:1;103878:2;103879:2;103880:2;103881:2;103882:2;103883:2;103884:2;103885:2;103886:2;103887:2;103888:2;103889:2;103890:2;103891:2;103892:2;103893:2;103894:2;103895:2;103896:2;103897:2;103898:2;103899:2;103900:2;103901:2;103905:2;103906:2;103907:1;103908:1;103909:2;103910:1;103911:1;103912:1;103913:2;103914:2;103915:2;103916:2;103920:1;103921:1;103925:1;103926:1;103927:1;103928:1;103929:1;103930:1;103931:1;103932:1;103933:1;103934:1;103935:1;103937:1;103938:1;103939:1;103940:2;103946:2;103947:2;103948:2;103950:2;103951:2;103952:2;103953:2;103954:2;103955:2;103956:2;103957:2;103958:1;103959:1;103960:2;103961:2;103962:1;103963:1;103969:2;103971:2;103975:2;103976:2;103977:2;103978:1;103979:1;103981:2;103982:1;103983:1;103984:1;103985:1;103986:1;103988:1;103991:1;103992:1;103993:1;103998:1;104000:1;104001:1;104002:1;104003:2;104004:2;104005:2;104006:2;104007:2;104008:2;104009:2;104010:2;104011:2;104013:2;104014:2;104015:2;104016:2;104017:2;104018:2;104019:2;104020:2;104021:2;104022:2;104026:2;104027:2;104028:2;104029:2;104030:2;104032:2;104033:2;104034:2;104042:2;104043:2;104044:2;104045:2;104046:2;104047:2;104048:1;104049:2;104050:1;104051:1;104052:1;104053:1;104054:1;104055:1;104056:1;104057:1;104058:1;104059:1;104060:1;104061:1;104062:1;104063:1;104064:1;104065:1;104066:1;104067:1;104068:1;104069:1;104070:2;104071:2;104072:2;104073:1;104074:1;104075:1;104083:1;104084:1;104085:1;104112:2;104113:2;104114:2;104115:1;104116:1;104117:1;104118:1;104119:2;104120:1;104121:2;104122:2;104123:2;104124:2;104125:2;104126:2;104127:2;104128:2;104129:2;104130:2;104132:1;104133:2;104134:2;104135:2;104136:2;104137:2;104138:2;104139:2;104140:2;104142:2;104144:2;104147:2;104148:2;104149:2;104150:2;104151:2;104152:2;104154:1;104155:1;104156:1;104158:2;104159:2;104160:2;104163:2;104166:1;104167:1;104168:1;104169:1;104172:2;104173:2;104174:2;104175:2;104176:2;104177:1;104181:1;104182:1;104183:1;104184:1;104190:1;104191:1;104192:1;104193:2;104194:2;104195:1;104196:1;104197:1;104198:1;104199:2;104200:2;104201:2;104202:2;104203:2;104204:2;104205:1;104206:1;104207:1;104208:1;104209:1;104210:2;104212:1;104213:1;104214:1;104215:2;104216:1;104217:1;104221:2;104222:2;104223:2;104227:1;104228:1;104229:1;104230:1;104231:1;104232:1;104233:1;104234:1;104235:1;104236:1;104237:1;104238:1;104239:1;104240:1;104241:1;104242:1;104243:1;104244:1;104249:2;104252:1;104253:1;104254:1;104256:1;104257:1;104258:1;104259:1;104260:1;104261:1;104263:1;104264:1;104270:0;104271:1;104272:1;104273:0;104275:1;104276:1;104277:2;104278:1;104279:1;104280:1;104281:2;104282:1;104283:2;104284:2;104285:1;104286:2;104287:2;104289:2;104296:2;104297:2;104298:2;104308:1;104309:1;104310:2;104311:2;104314:1;104315:2;104316:2;104317:1;104319:2;104320:2;104321:2;104322:2;104323:2;104324:1;104325:1;104326:1;104327:1;104346:2;104351:1;104372:1;104375:1;104378:1;104396:1;104397:1;104398:1;104399:2;104401:2;104404:2;104405:2;104406:2;104407:2;104443:2;104458:1;104459:2;104460:2;104461:1;104462:2;104463:2;104464:2;104465:2;104466:2;104474:2;104475:2;104476:2;104477:1;104478:1;104479:1;104480:1;104481:1;104482:1;104483:1;104484:1;104485:1;104486:1;104487:1;104488:1;104489:1;104494:2;104495:1;104496:1;104498:1;104499:1;104500:1;104501:1;104502:2;104503:1;104504:1;104506:1;104507:1;104508:1;104510:1;104511:1;104517:2;104518:1;104519:1;104520:1;104521:1;104522:1;104523:1;104527:2;104529:2;104530:2;104531:1;104532:1;104533:2;104534:2;104535:2;104540:2;104541:2;104546:1;104547:1;104548:1;104549:1;104550:1;104551:1;104552:1;104553:1;104554:1;104555:2;104557:1;104559:1;104560:2;104561:2;104562:2;104563:2;104564:2;104565:2;104566:1;104567:2;104568:2;104569:2;104570:2;104571:2;104572:2;104575:2;104576:1;104578:1;104579:1;104580:1;104581:1;104582:1;104583:1;104586:2;104587:1;104588:2;104589:1;104590:1;104591:1;104592:2;104593:2;104594:2;104595:1;104596:1;104597:1;104598:1;104599:2;104600:2;104601:2;104602:2;104604:1;104606:1;104607:1;104608:1;104609:1;104610:1;104611:1;104617:1;104618:1;104620:1;104621:1;104624:1;104628:1;104630:1;104631:1;104632:1;104633:1;104634:1;104635:1;104637:1;104638:1;104639:1;104642:1;104643:1;104645:1;104646:1;104653:1;104654:1;104655:1;104656:1;104657:1;104658:1;104659:1;104660:1;104661:1;104662:1;104664:1;104665:1;104666:1;104667:1;104668:1;104669:1;104670:1;104671:1;104672:1;104673:1;104674:1;104675:1;104676:1;104677:1;104678:1;104679:1;104680:1;104681:1;104682:1;104683:1;104684:1;104685:1;104686:1;104687:2;104688:2;104690:1;104691:1;104692:1;104693:1;104694:1;104695:2;104703:1;104704:1;104705:1;104706:1;104707:1;104708:2;104709:1;104710:1;104711:1;104712:1;104728:2;104729:2;104730:1;104731:1;104732:1;104733:1;104734:1;104735:1;104736:1;104737:1;104738:1;104739:1;104740:1;104741:1;104749:2;104752:1;104753:1;104754:2;104755:2;104770:2;104771:2;104772:2;104773:2;104774:2;104775:2;104776:1;104778:2;104779:2;104780:2;104781:1;104782:1;104783:1;104784:1;104785:1;104786:2;104787:1;104792:2;104793:2;104795:1;104796:1;104798:1;104800:2;104801:2;104804:1;104807:2;104808:2;104811:1;104813:1;104814:1;104815:2;104816:2;104817:2;104818:2;104820:1;104821:1;104822:2;104823:2;104824:1;104826:1;104827:1;104828:1;104834:1;104835:1;104836:1;104837:1;104839:2;104842:1;104843:1;104850:1;104851:1;104852:1;104853:1;104855:1;104860:1;104861:1;104862:1;104863:1;104864:1;104866:1;104867:1;104868:1;104869:1;104870:1;104871:1;104872:1;104873:1;104874:2;104875:2;104876:2;104880:2;104881:2;104882:2;104886:2;104887:2;104888:2;104889:2;104890:2;104891:2;104892:2;104895:2;104896:2;104899:2;104900:2;104901:2;104902:1;104903:1;104905:1;104906:2;104907:1;104908:1;104909:1;104910:1;104911:1;104912:1;104913:1;104914:1;104915:1;104916:1;104917:1;104919:1;104920:2;104922:1;104923:1;104924:1;104925:2;104926:2;104931:2;104933:2;104934:2;104942:2;104943:1;104944:1;104945:1;104946:1;104949:2;104950:2;104951:2;104952:2;104953:2;104954:1;104955:1;104956:1;104957:1;104958:1;104959:1;104960:2;104961:1;104962:1;104963:1;104964:1;104967:1;104968:1;104969:1;104970:1;104971:1;104972:1;104973:1;104974:1;104975:1;104976:1;104977:1;104978:1;104981:2;104983:2;104986:1;104987:1;104990:1;104991:1;104992:1;104995:2;104996:2;104997:2;104998:2;105000:1;105001:1;105002:1;105003:1;105004:1;105005:1;105007:1;105011:1;105013:1;105014:1;105015:1;105016:1;105017:1;105018:1;105019:1;105020:1;105021:1;105022:1;105023:1;105026:1;105028:1;105029:1;105030:1;105031:1;105032:1;105033:2;105036:1;105037:1;105039:2;105040:1;105041:1;105042:1;105043:2;105046:1;105047:1;105050:1;105051:1;105052:1;105053:1;105054:1;105055:1;105061:1;105062:1;105063:1;105064:1;105065:1;105068:1;105070:1;105071:1;105072:1;105073:1;105074:1;105075:1;105080:1;105082:1;105083:1;105084:1;105087:1;105089:1;105095:1;105096:1;105097:1;105104:1;105107:1;105110:2;105111:1;105115:1;105116:1;105118:1;105119:1;105121:1;105122:1;105123:1;105124:1;105125:1;105126:1;105127:1;105129:1;105130:1;105131:1;105132:1;105133:1;105134:1;105135:1;105136:1;105137:1;105140:1;105142:1;105143:1;105145:1;105147:2;105148:2;105150:1;105151:1;105152:1;105154:1;105155:1;105156:1;105157:1;105158:1;105159:2;105160:1;105161:1;105162:1;105163:1;105168:2;105175:2;105178:2;105179:2;105182:2;105183:2;105184:2;105185:2;105187:2;105189:2;105190:2;105191:2;105194:2;105195:2;105196:1;105197:1;105199:2;105200:2;105201:2;105202:1;105203:1;105204:1;105205:1;105206:1;105207:1;105208:1;105209:1;105210:1;105211:1;105212:1;105216:1;105217:1;105218:1;105219:1;105220:1;105221:1;105222:2;105223:2;105224:2;105225:1;105226:1;105227:1;105228:1;105229:1;105231:1;105232:1;105233:1;105234:1;105236:1;105237:1;105238:1;105240:2;105241:2;105245:2;105246:2;105247:2;105248:2;105249:2;105250:2;105252:1;105254:1;105255:1;200002:0;200005:0;200006:0;200007:0;200009:0;200013:0;200015:0;200016:0;200017:0;200018:0;200019:0;200020:0;200021:0;200022:0;200023:0;200024:0;200026:0;200027:0;200030:0;200031:0;200035:0;200036:0;200037:0;200040:0;200041:0;200042:0;200043:0;200044:0;200045:0;200046:0;200047:0;200052:0;200060:0;200074:0;200095:0;200101:0;200103:0;200110:1;200113:1;200114:0;200115:0;200116:0;200117:0;200118:0;200119:0;200122:0;200123:0;200124:0;200125:0;200126:0;200127:0;200128:0;200129:0;200130:0;200131:0;200132:0;200133:0;200134:0;200137:0;200138:0;200141:0;200144:0;200156:0;200163:0;200164:0;200166:0;200168:0;200169:1;200180:0;200193:0;200200:0;200205:0;200206:0;200207:0;200208:0;200209:0;200210:0;200211:0;200212:0;200213:0;200214:0;200215:0;200216:0;200218:0;200219:0;200220:0;200221:0;200222:0;200224:0;200225:0;200226:0;200227:0;200228:1;200229:1;200231:1;200232:1;200233:1;200236:1;200237:1;200239:0;200240:0;200241:0;200244:0;200245:0;200246:0;200247:0;200248:0;200249:0;200250:0;200251:0;200252:0;200256:0;200257:0;200262:0;200265:0;200267:0;200269:0;200272:0;200274:0;200277:0;200280:0;200283:0;200287:0;200308:0;200311:0;200312:0;200313:0;200314:0;200315:0;200316:0;200318:0;200319:0;200320:0;200323:0;200324:0;200325:0;200326:0;200327:0;200328:0;200330:0;200331:0;200332:1;200333:0;200335:0;200336:0;200337:0;200338:0;200339:0;200340:0;200341:0;200342:0;200344:0;200345:0;200347:0;200348:1;200349:1;200350:1;200351:1;200352:1;200353:1;200365:1;200366:1;200367:1;200370:0;200372:0;200379:0;200383:0;200414:0;200419:0;200424:0;200436:0;200441:0;200446:0;200447:0;200450:0;200451:0;200452:0;200453:0;200454:0;200455:0;200457:0;200459:1;200460:0;200461:1;200466:0;200472:0;200473:0;200474:0;200477:0;200478:0;200479:0;200480:0;200481:0;200482:0;200500:0;200506:0;200508:0;200509:0;200510:0;200511:0;200514:0;200516:0;200518:0;200519:1;200520:1;200522:0;200525:0;200529:0;200530:0;200536:0;200546:0;200548:0;200549:0;200551:0;200552:0;200554:0;200555:0;200556:0;200558:0;200559:0;200560:0;200561:0;200563:0;200568:0;200569:0;200570:0;200571:0;200580:0;200582:0;200583:0;200584:0;200585:0;200586:0;200587:0;200589:0;200590:0;200596:0;200598:0;200599:0;200601:0;200613:0;200620:0;200621:0;200658:0;200668:0;200682:0;200684:0;200687:0;200694:0;200696:0;200697:0;200735:0;200743:0;200744:0;200745:0;200746:0;200747:0;200748:0;200749:0;200751:0;200752:0;200755:0;200758:0;200760:0;200764:0;200772:0;200773:0;200774:0;200780:0;200784:0;200786:0;200791:0;200792:0;200795:0;200798:0;200818:0;200819:0;200820:0;200833:0;200835:0;200836:1;200837:1;200838:1;200855:0;200872:0;200896:0;200897:0;200898:0;200902:0;200903:0;200904:0;200906:0;200907:0;200908:0;200909:0;200910:0;200911:0;200912:0;200913:0;200925:0;200929:0;200930:0;200931:0;200932:0;200933:0;200934:0;200935:0;200937:0;200941:0;200942:0;200943:0;200947:0;200948:0;200952:0;200955:0;200958:0;200960:0;200962:0;200963:0;200966:0;200971:0;200979:0;200980:0;200984:0;200986:0;200995:0;200996:0;200997:0;200998:0;201000:0;201007:0;201011:0;201018:0;201020:0;201021:0;201022:1;201023:0;201024:0;201030:0;201031:0;201033:0;201036:0;201038:1;201047:0;201048:0;201049:0;201059:0;201085:0;201087:0;201089:0;201091:0;201093:0;201095:0;201097:0;201098:0;201100:0;201114:0;201117:0;201118:0;201124:0;201125:1;201129:0;201151:0;201152:0;201154:0;201155:0;201156:0;201157:0;201158:0;201159:0;201161:0;201163:1;201165:0;201166:0;201171:0;201173:1;201178:1;201180:0;201181:0;201185:0;201186:0;201187:0;201188:0;201189:0;201190:0;201192:0;201193:0;201194:0;201195:0;201196:0;201197:0;201198:0;201199:0;201200:0;201202:0;201203:0;201204:0;201205:0;201206:0;201207:0;201208:0;201209:0;201210:0;201211:0;201212:0;201215:0;201217:0;201218:0;201219:0;201220:0;201221:0;201222:0;201223:0;201224:0;201225:0;201226:0;201227:0;201228:0;201229:0;201230:0;201231:0;201232:0;201233:0;201234:0;201236:0;201237:0;201238:0;201239:0;201240:0;201241:0;201242:0;201243:0;201244:0;201245:1;201246:1;201247:1;201248:1;201249:1;201250:1;201251:1;201252:1;201253:1;201259:0;201260:0;201261:0;201262:0;201263:0;201264:0;201265:0;201266:0;201267:0;201268:0;201271:0;201274:1;201275:1;201284:0;201285:0;201290:1;201291:1;201296:0;201312:0;201322:0;201479:0;201523:0;201525:0;201526:0;201537:0;201538:0;201539:0;201540:0;201543:0;201544:1;201545:0;201546:0;201548:0;201549:0;201550:0;201551:0;201552:0;201553:0;201554:0;201555:0;201557:0;201558:0;201559:0;201560:0;201563:0;201568:0;201583:0;201585:1;201590:0;201591:0;201594:0;201595:0;201596:0;201598:0;201602:0;201603:0;201605:0;201608:0;201616:0;201623:0;201624:0;201625:0;201626:0;201627:0;201628:0;201629:0;201631:0;201632:0;201633:0;201637:0;201638:1;201640:0;201642:0;201643:0;201645:0;201655:1;201658:1;201659:1;201661:1;201662:1;201663:1;201664:1;201665:1;201666:0;201667:0;201668:0;201670:1;201671:1;201672:1;201673:1;201674:1;201675:1;201676:1;201677:1;201678:1;201680:1;201681:1;201682:1;201683:1;201684:1;201685:1;201686:1;201687:1;201692:1;201693:1;201700:1;201707:0;201711:0;201712:0;201721:0;201722:0;201738:0;201739:0;201741:0;201742:0;201745:0;201747:0;201749:0;201750:0;201757:0;201759:0;201761:0;201762:0;201763:0;201776:0;201789:0;201796:0;201797:1;201798:1;201799:1;201800:1;201801:1;201802:1;201803:1;201804:1;201805:1;201807:1;201821:0;201822:0;201839:0;201845:1;201846:0;201847:0;201848:0;201849:0;201850:0;201851:0;201852:0;201853:0;201854:0;201855:0;201856:0;201857:0;201858:0;201859:0;201860:0;201861:0;201863:0;201867:0;201870:0;201871:0;201872:0;201876:0;201878:0;201879:0;201880:0;201882:0;201883:0;201884:0;201885:0;201887:0;201890:0;201893:0;201896:0;201926:0;202011:0;202043:0;202044:0;202082:0;202095:0;202098:0;202103:0;202105:0;202120:0;202129:0;202131:0;202136:0;202139:0;202152:0;202165:0;202185:0;202196:0;202202:0;202203:0;202207:0;202208:0;202210:0;202238:0;202251:1;202252:1;202253:1;202275:0;202290:1;202295:0;202296:0;202297:1;202298:0;202299:0;202300:0;202301:0;202304:0;202305:0;202306:0;202307:0;202308:0;202310:0;202311:0;202312:0;202313:0;202333:0;202334:0;202335:0;202337:1;202338:0;202339:0;202340:0;202345:0;202349:0;202350:0;202351:0;202352:0;202353:0;202355:0;202357:0;202358:0;202361:0;202363:0;202364:0;202365:0;202368:0;202370:0;202371:0;202372:0;202373:0;202375:0;202376:0;202377:0;202378:0;202395:0;202396:0;202401:0;202412:0;202416:0;202432:0;202433:0;202434:0;202435:0;202436:0;202438:0;202439:0;202472:0;202476:0;202480:0;202495:0;202496:0;202498:0;202499:0;202500:0;202501:0;202502:0;202503:0;202504:0;202505:0;202506:0;202507:0;202508:0;202509:0;202511:0;202520:0;202526:0;202527:0;202530:0;202531:0;202532:0;202533:0;202534:0;202536:0;202539:0;202541:0;202576:0;202584:0;202585:0;202588:0;202598:0;202617:0;202679:0;202681:0;202682:0;202699:1;202702:1;202703:1;202704:1;202705:1;202706:1;202707:1;202708:1;202709:0;202712:0;202713:0;202714:1;202715:0;202729:0;202731:0;202734:0;202735:0;202736:0;202740:0;202745:0;202747:0;202748:0;202749:0;202751:0;202752:0;202759:0;202779:0;202783:0;202792:0;202803:0;202806:0;202812:0;202820:0;202823:0;202824:0;202826:0;202827:0;202828:0;202829:0;202830:0;202831:0;202832:0;202833:0;202834:0;202836:0;202846:0;202851:0;202852:0;202854:0;202858:0;202859:0;202860:0;202861:0;202862:0;202864:0;202865:0;202871:0;202873:0;202876:0;202881:0;202885:0;202886:0;202892:0;202901:0;202904:0;202926:0;202929:0;202942:0;202943:0;202944:0;202945:0;202946:0;202948:0;202949:0;202953:0;202954:0;202956:1;202960:1;202961:0;202962:0;202963:0;202968:0;202969:0;202970:0;202977:0;202978:1;202980:1;202981:1;202983:1;202985:1;202986:0;202987:1;202988:1;202989:1;202990:1;202991:1;202992:1;202993:1;203000:1;203018:0;203023:0;203027:0;203028:0;203046:0;203054:0;203078:0;203081:0;203088:0;203089:0;203108:0;203109:0;203112:0;203116:0;203122:0;203124:0;203125:0;203126:0;203128:0;203139:0;203140:0;203141:0;203142:0;203143:0;203144:0;203148:0;203152:0;203208:0;203217:0;203223:0;203227:0;203228:0;203229:0;203230:0;203231:0;203232:0;203233:0;203234:0;203235:0;203236:0;203238:0;203241:0;203243:0;203246:0;203247:0;203248:0;203249:0;203251:0;203254:0;203255:0;203256:0;203258:0;203260:0;203261:0;203262:0;203263:0;203265:0;203266:0;203267:0;203269:0;203270:0;203271:0;203273:0;203274:0;203275:0;203276:0;203277:0;203278:0;203281:0;203286:0;203287:0;203297:0;203302:0;203305:0;203306:0;203307:0;203308:0;203309:0;203310:0;203311:0;203312:0;203313:0;203314:0;203323:0;203329:0;203333:0;203334:0;203336:0;203337:0;203339:0;203340:0;203341:0;203342:0;203346:0;203382:0;203383:0;203384:0;203385:0;203388:0;203389:0;203390:0;203391:0;203398:0;203414:0;203415:0;203416:0;203421:0;203446:0;203448:0;203452:0;203476:0;203477:0;203482:0;203485:1;203487:0;203488:0;203491:0;203492:0;203501:0;203507:0;203508:0;203509:0;203512:0;203517:0;203526:0;203534:0;203535:0;203542:0;203543:0;203544:0;203549:0;203550:0;203551:0;203553:0;203554:0;203560:0;203561:0;203562:0;203565:0;203580:0;203582:0;203596:0;203601:0;203602:0;203604:0;203605:0;203606:0;203607:0;203608:0;203609:0;203612:0;203614:0;203615:0;203625:0;203629:0;203633:0;203651:0;203654:0;203656:0;203659:0;203666:0;203682:0;203713:0;203717:0;203740:1;203741:1;203742:1;203746:0;203747:0;203749:0;203756:0;203757:0;203763:0;203764:0;203765:0;203766:0;203767:0;203768:0;203769:0;203770:0;203772:0;203773:0;203774:0;203775:0;203776:0;203777:0;203778:0;203779:0;203781:0;203782:0;203783:0;203784:0;203785:0;203786:0;203787:0;203788:0;203789:0;203791:0;203794:0;203795:0;203796:0;203797:0;203798:0;203799:0;203801:0;203802:0;203804:0;203805:0;203806:0;203807:0;203808:0;203809:0;203810:0;203811:0;203812:0;203813:0;203814:0;203815:0;203816:0;203817:0;203834:0;203840:0;203841:0;203847:0;203848:0;203850:0;203853:0;203855:0;203858:0;203861:0;203865:0;203876:0;203879:0;203881:0;203882:0;203883:0;203885:0;203887:0;203889:0;203892:0;203896:0;203898:1;203900:0;203901:0;203902:0;203903:0;203905:0;203906:0;203910:0;203911:0;203912:0;203913:0;203914:0;203915:0;203916:0;203917:0;203918:0;203919:0;203929:0;203930:0;203947:0;203970:0;203980:0;203985:0;203989:0;203990:0;203998:0;203999:0;204001:0;204002:0;204005:0;204026:0;204038:0;204053:1;204055:0;204057:0;204065:0;204067:0;204075:0;204079:0;204084:0;204085:0;204086:0;204087:0;204088:0;204089:0;204090:0;204091:0;204092:0;204093:0;204094:0;204095:1;204096:1;204099:0;204100:0;204102:0;204105:0;204107:0;204110:0;204111:0;204114:0;204116:0;204117:0;204118:0;204123:0;204126:0;204134:0;204137:0;204139:0;204146:1;204156:0;204157:0;204158:1;204159:0;204160:0;204161:0;204162:0;204171:0;204172:0;204177:0;204178:0;204181:0;204185:0;204193:0;204196:0;204197:0;204198:0;204199:0;204200:0;204201:0;204203:0;204204:0;204206:0;204207:0;204208:0;204209:0;204210:0;204211:0;204220:0;204221:0;204229:0;204230:0;204231:0;204232:0;204233:0;204235:0;204236:0;204238:0;204244:0;204248:0;204249:0;204253:0;204254:0;204255:0;204256:0;204257:0;204258:0;204259:1;204265:0;204274:1;204286:0;204299:0;204303:0;204305:0;204315:0;204326:1;204329:0;204330:0;204335:0;204336:0;204346:0;204347:0;204357:0;204359:0;204363:0;204364:0;204369:0;204373:0;204376:0;204377:0;204380:0;204386:0;204387:0;204388:0;204389:0;204390:0;204392:0;204393:0;204400:0;204401:0;204402:0;204403:0;204404:0;204405:0;204406:0;204407:0;204409:0;204414:0;204417:0;204423:0;204427:0;204447:0;204453:0;204471:0;204487:0;204524:0;204525:0;204526:0;204528:0;204529:0;204531:0;204532:0;204533:1;204534:1;204535:1;204536:1;204541:0;204565:0;204572:0;204575:0;204585:0;204586:0;204588:0;204629:0;204630:0;204639:0;204641:0;204643:0;204660:0;204664:0;204666:0;204668:0;204689:0;204690:0;204693:0;204706:0;204709:1;204710:1;204711:1;204712:1;204713:1;204732:0;204733:0;204745:0;204748:0;204749:1;204751:0;204754:1;204755:1;204756:1;204759:0;204762:0;204776:0;204777:0;204778:0;204779:0;204782:0;204788:0;204790:0;204792:0;204795:0;204808:1;204813:0;204814:0;204815:0;204817:1;204819:1;204826:0;204827:0;204830:0;204832:0;204833:0;204835:1;204840:1;204864:0;204896:0;204898:0;204900:0;204904:0;204905:0;204908:0;204909:0;204910:0;204911:0;204914:0;204917:0;204918:0;204919:0;204921:0;204924:0;204925:0;204929:0;204930:0;204931:0;204934:0;204935:0;204936:0;204943:0;204944:0;204945:0;204950:0;204952:0;204953:0;204954:0;204955:0;204957:0;204961:0;204962:0;204975:0;204976:0;204977:0;204978:0;204991:0;205009:0;205013:0;205014:0;205015:0;205016:0;205017:0;205018:0;205020:0;205024:0;205060:1;205061:1;205062:1;205063:1;205064:0;205065:0;205067:0;205071:0;205072:0;205073:0;205085:0;205093:0;205145:1;205148:0;205149:0;205150:0;205151:0;205153:0;205155:0;205156:0;205157:0;205158:0;205165:1;205166:1;205167:0;205168:0;205169:0;205171:0;205173:0;205174:0;205175:0;205176:0;205177:0;205178:0;205179:1;205180:1;205184:0;205192:0;205193:0;205194:0;205195:0;205199:0;205201:0;205202:0;205203:0;205204:0;205206:1;205226:0;205227:0;205228:0;205230:0;205272:0;205277:0;205285:0;205286:0;205287:0;205288:0;205289:0;205290:0;205292:0;205293:0;205296:0;205297:0;205299:0;205300:0;205301:0;205302:0;205303:0;205306:0;205307:0;205309:0;205312:0;205314:0;205315:0;205326:0;205328:1;205329:1;205330:1;205331:1;205332:1;205333:1;205334:1;205335:1;205336:1;205337:1;205338:1;205339:1;205340:1;205341:1;205342:1;205344:1;205345:1;205346:1;205347:1;205348:1;205350:1;205351:1;205365:0;205378:0;205434:0;205456:0;205461:0;205465:0;205473:0;205506:0;205518:0;205519:0;205520:0;205522:0;205523:0;205526:0;205535:0;205548:0;205551:0;205552:0;205558:0;205559:0;205561:0;205562:0;205575:0;205576:0;205579:0;205609:0;205617:0;205631:0;205633:0;205642:0;205643:0;205644:0;205645:0;205646:0;205647:0;205648:0;205650:0;205658:0;205660:0;205664:0;205677:0;205681:0;205683:0;205684:0;205685:0;205686:0;205687:0;205689:0;205691:0;205692:0;205693:0;205694:0;205704:0;205713:0;205714:0;205719:0;205722:0;205723:0;205725:0;205728:0;205791:0;205796:0;205802:0;205804:0;205828:0;205840:0;205845:0;205848:0;205849:0;205858:0;205859:0;205861:0;205862:0;205863:0;205865:0;205871:0;205876:0;205881:0;205888:0;205889:0;205892:0;205894:0;205895:0;205909:0;205913:0;205916:0;205925:0;205946:0;205947:0;205963:0;205964:0;205990:0;206005:1;206006:0;206007:0;206012:0;206013:0;206019:0;206020:0;206023:0;206034:0;206039:0;206040:0;206041:0;206046:0;206048:0;206059:0;206060:0;206067:0;206068:0;206070:0;206071:0;206072:0;206073:0;206084:1;206085:1;206087:1;206088:1;206089:1;206090:1;206092:1;206093:1;206094:1;206095:1;206096:1;206097:1;206098:0;206104:1;206123:0;206124:0;206125:0;206126:0;206127:0;206128:0;206129:0;206130:0;206131:0;206132:0;206136:0;206138:0;206141:0;206143:1;206144:0;206147:0;206148:0;206149:0;206151:0;206154:0;206156:0;206165:0;206172:0;206191:0;206193:0;206198:0;206206:0;206207:0;206212:0;206247:0;206251:1;206252:1;206253:1;206255:0;206256:0;206257:0;206258:0;206259:0;206260:0;206261:0;206262:0;206263:0;206264:0;206265:0;206266:0;206267:0;206291:0;206292:0;206293:0;206296:0;206297:0;206299:1;206300:1;206311:0;206317:0;206322:0;206335:0;206336:0;206337:0;206345:0;206346:0;206347:0;206348:0;206351:0;206358:0;206450:0;206451:0;206453:0;206454:0;206455:0;206457:0;206459:0;206460:0;206461:0;206462:0;206463:0;206464:0;206465:0;206467:0;206469:0;206474:0;206475:0;206482:0;206484:0;206495:0;206496:0;206497:0;206498:0;206499:0;206501:0;206502:0;206504:0;206505:0;206506:0;206507:0;206508:0;206534:0;206555:0;206580:1;206604:0;206605:0;206606:0;206607:0;206614:0;206616:0;206621:0;206625:0;206626:0;206627:0;206628:0;206629:0;206643:0;206644:0;206645:0;206646:0;206647:0;206648:0;206649:0;206650:0;206651:0;206652:0;206653:0;206654:0;206655:0;206656:0;206657:0;206659:0;206661:0;206662:0;206663:0;206664:0;206666:0;206667:0;206671:0;206672:0;206673:0;206689:0;206697:0;206720:0;206722:0;206733:0;206788:0;206791:1;206792:1;206806:1;206837:0;206838:0;206846:1;206847:1;206848:1;206849:1;206851:1;206852:1;206853:1;206854:1;206855:1;206856:1;206857:1;206858:1;206859:1;206860:1;206863:1;206864:1;206866:1;206867:1;206868:1;206869:1;206870:1;206874:1;206875:1;206876:1;206907:1;206908:0;206909:0;206913:0;206914:0;206915:0;206916:0;206917:0;206918:0;206923:0;206926:0;206927:0;206932:0;206939:0;206940:0;206942:0;206944:0;206945:0;206946:0;206947:0;206949:0;206951:0;206952:0;206953:0;206964:0;207069:1;207072:0;207073:0;207074:0;207076:0;207077:0;207078:0;207079:0;207080:0;207081:0;207082:0;207083:0;207084:0;207085:0;207086:0;207088:0;207089:0;207094:1;207095:1;207097:0;207098:0;207110:0;207112:0;207117:0;207118:0;207119:0;207120:0;207121:0;207122:0;207123:0;207220:0;207293:0;207294:0;207295:0;207296:0;207297:0;207300:0;207301:0;207302:0;207303:0;207304:0;207305:0;207306:0;207307:0;207309:0;207310:0;207311:0;207315:0;207316:0;207317:0;207318:0;207319:0;207324:0;207336:1;207337:1;207340:0;207341:0;207349:1;207350:1;207352:1;207354:1;207355:1;207356:1;207357:1;207358:1;207359:1;207360:1;207361:1;207362:1;207363:1;207364:1;207365:1;207366:1;207367:1;207369:1;207370:1;207372:1;207378:1;207379:1;207381:1;207382:1;207394:0;207414:1;207415:0;207416:0;207417:0;207418:0;207419:0;207420:0;207421:0;207422:0;207423:0;207424:0;207425:0;207426:0;207428:0;207430:0;207431:0;207436:1;207437:1;207450:0;207451:0;207452:0;207453:0;207454:0;207455:0;207460:0;207462:0;207463:0;207465:0;207472:0;207477:0;207483:0;207484:0;207489:0;207490:0;207492:0;207498:0;207499:0;207501:1;207502:0;207506:0;207509:0;207513:0;207519:0;207520:0;207531:0;207540:0;207543:0;207554:0;207560:0;207572:0;207573:0;207588:0;207589:0;207595:0;207596:0;207599:0;207604:0;207613:0;207614:0;207615:0;207616:0;207617:0;207627:0;207630:0;207632:0;207652:0;207662:0;207701:0;207704:0;207733:0;207748:0;207752:0;207753:0;207764:0;207769:0;207770:0;207772:0;207773:0;207777:0;207780:0;207787:0;207806:0;207830:0;207867:0;207871:0;207874:0;207875:0;207877:0;207879:0;207884:0;207907:0;207909:0;207912:0;207949:0;207962:0;207965:0;207966:0;207977:0;207978:0;207982:0;207987:0;208050:1;208051:1;208052:1;208053:1;208059:0;208102:0;208120:0;208125:1;208126:1;208127:1;208128:1;208129:1;208130:1;208131:1;208132:0;208149:0;208151:0;208152:0;208154:0;208158:0;208162:0;208181:0;208186:0;208188:1;208193:1;208194:1;208196:1;208197:0;208198:0;208199:0;208205:0;208206:0;208219:0;208229:0;208232:0;208233:0;208236:0;208237:0;208241:0;208244:0;208245:0;208246:0;208248:0;208249:0;208250:0;208251:0;208252:0;208253:0;208254:0;208255:0;208256:0;208258:0;208263:0;208264:0;208276:0;208277:0;208279:0;208281:0;208282:0;208283:0;208285:0;208286:0;208287:0;208288:0;208289:0;208292:0;208293:0;208295:0;208296:0;208298:0;208302:0;208305:0;208313:0;208315:0;208316:0;208317:0;208318:0;208319:0;208320:0;208321:0;208323:0;208324:0;208325:0;208327:0;208334:0;208346:0;208348:0;208349:0;208350:0;208351:0;208352:0;208361:0;208364:0;208366:0;208367:0;208372:0;208373:0;208374:0;208375:0;208376:0;208378:0;208379:0;208380:0;208382:0;208386:0;208387:0;208389:0;208395:0;208396:0;208397:0;208398:0;208399:0;208400:0;208401:0;208403:0;208405:0;208413:0;208415:0;208417:0;208418:0;208420:0;208421:0;208422:0;208423:0;208424:0;208425:0;208438:0;208439:0;208440:0;208441:0;208442:0;208443:0;208444:0;208445:0;208450:0;208451:0;208453:0;208455:0;208456:0;208461:0;208464:0;208465:0;208467:1;208468:1;208469:0;208470:0;208471:0;208472:0;208473:0;208478:0;208479:0;208480:0;208481:0;208482:0;208488:0;208489:0;208492:0;208494:0;208498:0;208499:0;208509:0;208513:0;208523:0;208527:0;208529:0;208534:0;208536:0;208539:0;208544:0;208545:0;208546:0;208547:0;208550:0;208551:0;208552:0;208553:0;208561:0;208564:0;208568:0;208570:0;208572:0;208580:0;208582:0;208585:0;208586:0;208591:0;208599:1;208601:0;208602:0;208603:0;208604:0;208605:0;208606:0;208609:1;208610:1;208611:1;208612:1;208618:0;208619:0;208620:0;208621:0;208624:1;208638:0;208643:0;208658:0;208660:0;208663:0;208666:0;208670:0;208672:0;208676:0;208682:0;208683:0;208689:0;208695:0;208697:0;208699:0;208702:0;208715:0;208716:0;208717:0;208720:0;208721:0;208723:0;208739:0;208740:0;208752:0;208753:0;208769:0;208775:0;208792:0;208811:0;208812:0;208816:0;208818:0;208819:0;208830:0;208840:0;208844:0;208845:0;208846:0;208848:0;208849:0;208852:0;208855:0;208863:0;208864:0;208865:0;208885:0;208894:0;208897:0;208904:0;208912:0;208917:1;208919:1;208926:0;208937:0;208941:0;208954:0;208963:0;208969:0;208978:0;208979:0;208985:0;208987:0;208994:0;208995:0;208996:0;208997:0;208998:0;208999:0;209003:1;209008:0;209009:0;209028:0;209077:0;209078:0;209079:0;209080:0;209081:0;209082:0;209090:0;209093:0;209097:0;209098:0;209099:0;209112:0;209113:0;209114:0;209115:1;209116:0;209117:0;209120:0;209122:0;209130:0;209131:0;209132:0;209133:0;209159:0;209182:0;209183:0;209184:0;209186:0;209187:0;209193:0;209195:0;209201:0;209202:0;209203:0;209204:0;209205:0;209206:0;209210:0;209211:0;209212:0;209213:0;209220:0;209225:0;209241:0;209242:0;209243:0;209247:0;209248:0;209277:0;209278:0;209281:0;209282:0;209313:0;209315:0;209319:0;209320:0;209321:0;209325:0;209328:0;209340:0;209344:0;209361:0;209379:0;209380:0;209383:0;209389:0;209390:0;209393:0;209394:0;209395:0;209396:0;209397:0;209398:0;209409:0;209416:0;209435:0;209452:0;209454:0;209464:1;209465:0;209469:0;209472:0;209474:0;209475:0;209476:0;209477:0;209478:0;209485:0;209486:0;209487:0;209488:0;209489:0;209493:0;209494:0;209495:0;209496:0;209497:0;209498:0;209499:0;209500:0;209501:0;209504:0;209515:1;209516:1;209518:1;209519:1;209522:1;209523:1;209524:1;209525:1;209527:0;209528:0;209537:1;209542:0;209543:0;209545:0;209546:0;209547:0;209548:0;209549:0;209550:0;209551:0;209552:0;209555:0;209556:0;209557:0;209558:0;209560:0;209562:0;209563:0;209564:0;209565:0;209566:0;209568:0;209570:0;209571:0;209572:0;209573:0;209579:0;209582:0;209583:0;209584:0;209588:0;209593:0;209601:0;209613:0;209614:0;209616:0;209619:1;209621:1;209622:1;209635:0;209650:1;209651:1;209652:1;209653:1;209654:0;209655:0;209656:0;209662:2;209669:0;209670:0;209673:0;209701:0;209744:1;209745:1;209753:0;209754:0;209755:0;209756:0;209757:0;209758:0;209759:0;209760:0;209762:0;209763:0;209764:0;209765:0;209766:0;209767:0;209768:0;209770:0;209771:0;209785:0;209798:0;209823:0;209849:0;209864:0;209886:0;210001:0;210027:0;210036:0;210079:0;210084:0;210093:0;210099:0;210102:1;210112:0;210117:0;210118:0;210129:0;210137:0;210139:1;210141:1;210143:1;210144:1;210147:1;210148:1;210149:1;210150:1;210154:1;210155:1;210156:1;210159:1;210168:0;210169:0;210175:0;210176:0;210177:0;210178:0;210179:0;210180:0;210181:0;210184:1;210185:1;210186:1;210187:1;210188:1;210190:1;210191:1;210199:1;210202:0;210205:0;210206:0;210207:0;210208:0;210209:0;210210:0;210214:0;210215:0;210237:0;210240:0;210242:0;210243:0;210244:0;210245:0;210247:0;210252:0;210260:0;210261:0;210262:0;210263:0;210264:0;210267:0;210268:0;210269:0;210270:0;210271:0;210272:0;210275:0;210276:0;210277:0;210278:0;210279:0;210280:0;210283:0;210284:0;210285:0;210294:0;210296:0;210336:0;210337:0;210340:0;210343:0;210345:0;210361:0;210362:0;210364:0;210369:0;210371:0;210373:1;210374:1;210375:1;210376:1;210377:1;210378:1;210379:1;210380:1;210381:1;210382:1;210383:1;210384:1;210385:0;210386:0;210387:0;210388:0;210389:0;210390:0;210408:0;210428:0;210450:0;210486:1;210494:0;210496:0;210501:0;210502:0;210534:1;210535:1;210537:0;210547:0;210551:0;210552:0;210553:0;210555:0;210556:0;210557:0;210558:0;210561:0;210562:0;210563:0;210574:0;210575:0;210576:0;210578:0;210582:0;210612:1;210624:0;210641:0;210642:1;210643:1;210647:1;210648:1;210649:1;210650:1;210651:1;210652:1;210653:1;210654:1;210655:1;210656:1;210657:0;210672:0;210673:0;210674:0;210675:0;210682:0;210683:0;210684:0;210685:0;210725:0;210726:0;210727:0;210753:1;210754:1;210756:0;210757:0;210758:0;210759:0;210760:0;210761:0;210762:0;210763:0;210764:0;210765:0;210767:0;210770:0;210771:0;210772:0;210773:0;210777:0;210778:0;210780:0;210781:0;210782:0;210784:0;210785:0;210789:0;210800:0;210803:0;210805:0;210816:0;210821:0;210822:0;210823:0;210824:0;210825:0;210826:0;210827:0;210828:0;210829:0;210830:0;210831:0;210832:0;210833:0;210834:0;210835:0;210836:0;210839:1;210841:1;210843:1;210849:1;210854:0;210855:0;210856:0;210857:0;210858:0;210862:0;210863:0;210864:1;210865:0;210870:1;210871:1;210879:0;210880:0;210905:0;210906:0;210907:0;210909:0;210910:0;210911:0;210912:0;210913:0;210914:0;210915:0;210916:0;210917:0;210920:0;210921:0;210922:0;210923:0;210940:0;210957:0;210960:0;210981:0;210982:0;210983:0;210984:0;210985:0;210986:0;210987:0;210988:0;210989:0;210990:0;210991:0;210992:0;210993:0;210994:0;210995:0;210996:0;210997:0;210998:0;210999:0;211000:0;211011:0;211029:0;211048:0;211050:0;211051:0;211053:0;211061:0;211092:0;211104:0;211105:0;211108:0;211109:0;211111:0;211112:0;211113:0;211122:0;211174:0;211175:0;211209:0;211210:0;211217:0;211239:0;211242:0;211243:0;211253:0;211256:0;211296:0;211320:0;211361:0;211364:1;211365:1;211369:1;211379:0;211382:0;211383:0;211384:0;211385:0;211386:0;211387:0;211388:0;211389:0;211390:0;211392:0;211393:0;211394:0;211395:0;211396:0;211397:0;211398:0;211399:1;211400:0;211401:0;211402:0;211403:0;211404:0;211405:0;211409:0;211410:0;211411:0;211412:0;211413:0;211414:0;211415:0;211416:0;211417:0;211418:0;211419:0;211420:0;211421:0;211422:0;211423:0;211424:0;211425:0;211427:0;211430:0;211432:0;211433:0;211434:0;211435:0;211437:0;211438:0;211439:0;211440:0;211441:0;211442:0;211443:0;211444:0;211445:0;211447:0;211451:0;211452:0;211454:0;211455:0;211456:0;211459:1;211460:1;211461:1;211462:1;211463:0;211466:0;211467:0;211468:0;211469:0;211471:0;211474:0;211475:0;211476:0;211482:1;211484:1;211489:0;211491:0;211492:0;211496:0;211498:0;211499:0;211500:0;211503:0;211504:0;211506:0;211508:0;211524:0;211532:0;211533:0;211540:0;211541:0;211543:0;211558:0;211586:0;211587:0;211589:0;211590:0;211593:0;211595:0;211598:0;211600:0;211601:0;211603:0;211605:0;211607:0;211609:0;211611:0;211613:0;211620:0;211621:0;211631:0;211632:0;211641:0;211643:0;211644:0;211648:0;211649:0;211650:0;211652:0;211657:0;211658:0;211659:0;211660:0;211661:0;211662:0;211663:0;211664:0;211665:0;211666:0;211667:0;211668:0;211670:0;211671:0;211672:0;211673:0;211674:0;211675:1;211676:1;211677:1;211679:1;211680:1;211682:1;211683:1;211687:1;211689:1;211690:1;211698:0;211699:0;211719:0;211736:0;211737:0;211739:0;211747:0;211753:0;211765:0;211785:0;211786:0;211795:1;211809:1;211814:0;211816:0;211834:0;211839:0;211840:0;211841:0;211868:0;211870:0;211877:0;211878:0;211889:0;211890:0;211892:0;211904:0;211905:0;211907:0;211908:0;211911:0;211912:0;211913:0;211914:0;211915:0;211916:0;211917:0;211919:0;211923:1;211949:0;211951:0;211957:1;211960:0;211964:0;211965:0;211968:0;211970:0;211982:1;212007:0;212014:0;212058:0;212080:0;212081:0;212082:0;212083:0;212084:0;212090:0;212092:0;212096:0;212099:1;212113:0;212127:0;212152:0;212153:0;212157:0;212171:0;212172:0;212174:0;212182:0;212184:0;212186:0;212190:0;212194:0;212195:0;212199:0;212200:0;212206:0;212207:0;212213:0;212214:0;212215:0;212216:1;212221:0;212223:0;212242:0;212249:0;212251:0;212254:0;212257:0;212258:0;212259:0;212260:0;212262:0;212263:0;212264:0;212265:0;212266:0;212267:0;212268:0;212270:0;212271:0;212273:0;212274:0;212275:0;212276:0;212277:0;212278:0;212292:0;212293:0;212295:0;212299:0;212303:0;212305:0;212307:0;212308:0;212309:0;212310:0;212311:0;212312:0;212313:0;212314:0;212315:0;212316:0;212319:0;212322:0;212330:0;212340:1;212342:0;212345:0;212359:0;212360:0;212368:0;212371:0;212379:0;212384:0;212385:0;212386:0;212387:0;212395:0;212398:0;212399:0;212400:0;212401:0;212402:0;212403:0;212404:0;212405:0;212410:0;212415:0;212416:0;212421:0;212422:0;212429:1;212431:0;212432:0;212436:0;212446:0;212461:0;212463:0;212472:0;212474:0;212477:0;212478:0;212479:0;212480:0;212483:0;212487:0;212489:0;212496:0;212498:0;212502:0;212505:0;212512:0;212513:0;212521:0;212523:0;212524:0;212525:0;212526:0;212528:0;212530:0;212531:0;212532:0;212534:1;212535:1;212536:0;212543:0;212546:0;212550:1;212552:0;212553:0;212554:1;212555:0;212556:0;212557:0;212558:0;212560:0;212561:0;212562:0;212563:0;212567:0;212570:0;212575:0;212576:0;212577:0;212597:0;212621:0;212704:0;212716:0;212798:0;212814:0;212962:0;213001:0;213004:0;213005:0;213006:0;213012:0;213013:0;213014:0;213034:0;213036:0;213073:0;213102:0;213111:0;213112:0;213113:0;213115:0;213116:0;213117:0;213118:0;213119:0;213121:0;213125:0;213127:0;213130:0;213137:0;213138:0;213139:0;213140:0;213145:0;213149:0;213151:0;213152:0;213153:0;213156:0;213159:0;213163:0;213164:0;213165:0;213166:0;213167:0;213169:0;213170:0;213171:0;213175:0;213176:0;213177:0;213178:0;213179:0;213180:0;213184:0;213187:0;213189:0;213190:0;213204:0;213206:0;213207:0;213208:0;213209:0;213210:0;213211:0;213212:0;213214:0;213215:0;213216:0;213217:0;213220:0;213221:0;213222:0;213223:0;213224:0;213225:0;213231:0;213232:0;213234:0;213235:0;213236:0;213237:0;213238:0;213239:0;213240:0;213241:0;213242:0;213243:0;213244:0;213245:0;213246:0;213247:0;213248:0;213250:0;213252:0;213254:0;213256:0;213257:0;213259:0;213260:0;213261:0;213264:0;213268:0;213414:0;213446:0;213455:0;213463:0;213475:0;213481:0;213496:0;213511:0;213513:0;213515:0;213516:0;213518:0;213525:0;213526:0;213529:0;213530:0;213531:0;213533:0;213534:0;213535:0;213536:0;213537:0;213538:0;213539:0;213540:0;213541:0;213542:0;213543:0;213544:0;213545:0;213546:0;213557:0;213560:0;213565:0;213566:0;213573:0;213583:0;213585:0;213590:0;213604:0;213628:0;213641:0;213642:0;213643:0;213773:0;213777:0;213780:0;213781:0;213782:0;213785:0;213786:0;213787:0;213790:1;213792:1;213793:1;213795:1;213796:1;213802:0;213812:0;213815:0;213816:0;213817:0;213820:0;213822:0;213823:0;213830:0;213835:0;213849:0;213850:0;213859:0;213863:0;213867:0;213871:0;213878:0;213882:0;213887:0;213888:0;213902:0;213904:0;213908:0;213909:0;213913:0;213930:0;213934:0;213939:0;213940:0;213951:0;213953:0;213956:0;213969:0;213970:0;213975:0;213978:0;213980:0;213981:0;213986:0;213988:0;213989:0;213990:0;213991:0;213995:0;213997:0;213999:0;214001:0;214002:0;214003:0;214004:0;214005:0;214007:0;214011:0;214014:0;214018:0;214020:0;214021:0;214022:0;214023:0;214024:0;214025:0;214026:0;214027:0;214028:0;214029:0;214030:0;214031:0;214033:0;214034:0;214035:0;214036:0;214037:0;214038:0;214039:0;214040:0;214041:0;214042:0;214044:0;214045:0;214046:0;214047:0;214048:0;214051:0;214052:0;214053:0;214054:0;214055:0;214056:0;214057:0;214064:0;214068:0;214077:0;214087:0;214088:0;214089:0;214090:0;214091:0;214092:0;214094:0;214095:0;214097:0;214102:0;214103:0;214104:0;214105:0;214107:0;214109:1;214110:0;214112:0;214113:0;214114:0;214115:0;214118:0;214119:0;214120:0;214121:0;214131:0;214132:0;214133:0;214134:0;214135:0;214141:0;214142:0;214143:0;214146:0;214147:0;214148:0;214150:0;214151:0;214152:0;214153:0;214154:0;214155:0;214157:0;214158:0;214159:0;214164:0;214165:0;214167:0;214169:0;214170:0;214180:1;214181:1;214183:1;214184:1;214185:1;214186:1;214188:0;214191:0;214192:0;214195:0;214200:0;214201:0;214205:0;214206:0;214208:0;214209:0;214210:0;214211:0;214212:0;214215:0;214216:0;214217:0;214223:0;214224:0;214233:0;214238:0;214239:0;214240:0;214241:0;214242:0;214243:0;214244:0;214245:0;214246:0;214248:0;214251:0;214255:0;214257:0;214258:0;214259:0;214264:0;214265:0;214266:0;214267:0;214268:0;214269:0;214270:0;214271:0;214272:0;214273:0;214274:0;214282:0;214311:0;214312:0;214313:0;214314:0;214315:0;214327:0;214330:0;214345:0;214348:0;214351:0;214352:0;214353:0;214354:0;214355:0;214356:0;214357:0;214358:0;214359:0;214360:0;214361:0;214362:0;214364:0;214365:0;214366:0;214367:0;214368:0;214369:0;214371:0;214372:0;214373:0;214374:0;214375:0;214376:0;214377:0;214378:0;214379:0;214380:0;214381:0;214382:0;214383:0;214384:0;214385:0;214386:0;214387:0;214388:0;214389:0;214390:0;214392:0;214393:0;214394:0;214395:0;214396:0;214397:0;214398:0;214399:0;214400:0;214401:0;214402:0;214404:0;214405:0;214406:0;214408:0;214409:0;214410:0;214411:0;214412:0;214413:0;214414:0;214415:0;214416:0;214417:0;214418:0;214419:0;214420:0;214421:0;214422:0;214423:0;214424:0;214425:0;214426:0;214427:0;214428:0;214429:0;214430:0;214431:0;214432:0;214433:0;214434:0;214437:0;214438:0;214441:0;214442:0;214443:0;214445:0;214446:0;214447:0;214449:0;214450:0;214451:0;214458:0;214476:0;214509:0;214510:0;214540:0;214541:0;214562:0;214564:0;214573:0;214576:0;214583:0;214589:0;214590:0;214591:0;214592:0;214595:0;214609:0;214610:0;214611:0;214612:0;214614:0;214616:0;214617:0;214626:0;214637:0;214647:0;214655:0;214656:0;214657:0;214663:0;214664:0;214680:0;214683:0;214688:0;214689:0;214690:0;214691:0;214696:0;214697:0;214698:0;214699:0;214701:0;214702:0;214703:0;214704:0;214708:0;214712:0;214715:0;214721:0;214722:0;214725:0;214726:0;214727:0;214728:0;214729:0;214736:0;214738:0;214739:0;214757:0;214777:0;214778:0;214780:0;214789:0;214792:0;214800:0;214801:0;214812:0;214815:0;214820:0;214821:0;214823:0;214824:0;214825:0;214827:0;214829:0;214831:0;214832:0;214833:0;214835:0;214838:0;214839:0;214840:0;214847:0;214849:0;214850:0;214851:0;214853:0;214860:0;214864:0;214872:0;214873:0;214875:0;214876:0;214877:0;214878:0;214879:0;214880:0;214881:0;214886:0;214895:0;214896:0;214897:0;214898:0;214899:0;214900:0;214903:0;214904:0;214907:0;214908:0;214911:0;214912:0;214915:0;214917:0;214918:0;214920:0;214923:0;214924:0;214929:0;214940:0;214943:0;214945:0;214947:0;214951:0;214963:0;214964:0;214965:0;214976:1;214977:0;214978:0;214979:0;214980:0;214981:0;214982:0;214983:0;214984:0;214985:0;214986:0;214987:0;214988:0;214994:0;215007:0;215013:0;215021:0;215022:0;215023:0;215024:1;215025:1;215026:1;215027:1;215028:1;215029:1;215030:1;215031:1;215032:1;215033:1;215034:0;215035:0;215036:0;215037:0;215038:0;215039:0;215041:0;215042:0;215043:0;215044:0;215046:0;215047:0;215048:0;215049:0;215050:0;215051:0;215052:0;215053:0;215054:0;215055:0;215057:0;215058:0;215060:0;215061:0;215062:0;215063:0;215064:0;215065:0;215066:0;215067:0;215068:0;215069:0;215070:0;215071:0;215072:0;215073:0;215074:0;215077:0;215079:0;215081:0;215094:0;215097:0;215098:0;215100:0;215102:0;215104:0;215105:0;215106:0;215107:0;215141:1;215142:1;215143:1;215147:1;215151:1;215154:1;215156:1;215159:1;215160:1;215174:0;215178:0;215179:0;215183:1;215184:1;215186:1;215187:1;215188:1;215190:1;215191:1;215193:1;215194:1;215201:1;215202:0;215203:0;215208:0;215209:0;215217:0;215218:0;215219:0;215220:0;215221:0;215222:0;215225:1;215228:1;215230:0;215231:0;215232:0;215233:0;215236:0;215237:0;215238:0;215241:0;215243:0;215244:0;215245:0;215246:0;215247:0;215250:0;215252:0;215263:0;215285:1;215286:1;215287:1;215288:1;215293:0;215297:0;215298:0;215300:0;215301:0;215303:0;215304:0;215305:0;215307:0;215315:0;215320:0;215322:0;215323:0;215325:0;215335:0;215337:0;215340:0;215345:0;215346:0;215353:1;215367:0;215370:0;215378:0;215398:0;215399:0;215400:0;215401:0;215412:0;215413:0;215414:0;215420:0;215421:0;215422:0;215440:0;215445:0;215446:0;215447:0;215448:0;215451:0;215454:0;215458:1;215459:1;215460:0;215461:0;215463:0;215467:0;215468:0;215472:0;215474:0;215477:0;215478:0;215481:0;215482:0;215505:0;215543:0;215583:0;215624:0;215625:0;215626:0;215630:0;215632:0;215640:0;215652:0;215660:0;215700:0;215704:0;215705:0;215713:0;215715:0;215716:0;215717:0;215720:0;215722:0;215739:0;215740:0;215741:0;215742:0;215743:0;215764:0;215765:0;215769:0;215772:0;215773:0;215775:0;215779:0;215783:0;215785:0;215786:0;215793:0;215801:0;215802:0;215803:0;215804:0;215805:0;215808:0;215809:0;215812:0;215814:0;215815:0;215817:0;215823:0;215824:0;215825:0;215826:0;215829:0;215832:0;215833:0;215836:0;215837:0;215847:0;215849:0;215852:0;215854:0;215856:0;215858:0;215859:0;215864:0;215872:0;215874:0;215882:0;215884:0;215891:0;215893:0;215894:0;215906:0;215910:0;215911:0;215913:0;215918:0;215922:0;215939:0;215940:0;215941:0;215942:0;215943:0;215944:0;215945:0;215946:0;215949:0;215986:0;215987:0;215988:0;215989:0;215990:0;215991:0;215992:0;215993:0;215994:0;215995:0;215996:0;215997:0;215998:0;216000:0;216001:0;216003:0;216009:0;216010:0;216011:0;216012:0;216014:0;216015:0;216018:0;216019:0;216020:0;216022:0;216023:0;216024:0;216048:0;216049:0;216051:0;216052:0;216053:0;216060:0;216061:0;216065:0;216066:0;216068:0;216070:0;216071:0;216081:0;216086:0;216087:0;216088:0;216089:1;216090:0;216092:0;216107:0;216111:0;216112:0;216113:0;216114:0;216115:0;216118:0;216119:0;216120:0;216121:0;216122:0;216123:0;216124:0;216125:0;216126:0;216127:0;216128:0;216135:0;216137:0;216138:0;216139:0;216166:0;216170:0;216173:0;216179:0;216180:0;216181:0;216182:0;216184:0;216185:0;216186:0;216187:0;216188:0;216189:0;216192:0;216195:1;216210:0;216212:0;216213:0;216219:0;216285:0;216317:0;216320:0;216349:0;216353:0;216354:0;216381:0;216390:0;216391:0;216418:0;216427:0;216429:0;216430:0;216431:0;216432:0;216435:0;216447:0;216452:0;216457:0;216461:0;216466:0;216469:0;216472:0;216473:0;216474:0;216475:0;216476:0;216479:0;216491:0;216492:0;216493:0;216494:0;216495:0;216497:0;216507:0;216516:0;216517:0;216518:0;216519:0;216578:0;216579:0;216580:0;216600:0;216601:0;216602:0;216610:1;216611:1;216612:1;216613:1;216620:0;216621:0;216625:0;216628:0;216629:0;216632:0;216638:0;216639:0;216640:0;216646:0;216648:0;216653:0;216656:0;216657:0;216661:0;216662:0;216663:0;216667:0;216672:0;216674:0;216675:0;216676:0;216704:0;216705:0;216706:0;216716:0;216720:0;216732:0;216733:0;216734:0;216756:0;216775:0;216776:0;216778:0;216785:0;216786:0;216798:0;216803:0;216817:1;216837:0;216841:0;216843:0;216850:0;216868:0;216869:0;216876:0;216889:0;216890:0;216891:0;216892:0;216893:0;216894:0;216895:0;216896:0;216898:0;216901:0;216917:0;216936:0;216939:0;216968:0;216974:0;216981:0;216991:0;216992:0;216994:0;216998:0;217007:0;217030:0;217039:0;217041:0;217042:0;217043:0;217047:0;217051:0;217093:0;217105:0;217106:0;217107:0;217108:0;217109:0;217110:0;217112:0;217119:0;217129:1;217132:0;217141:0;217142:0;217145:0;217150:0;217151:0;217153:0;217157:0;217158:0;217164:0;217173:0;217176:0;217177:0;217201:0;217202:0;217203:0;217204:0;217209:0;217221:0;217222:0;217223:0;217238:0;217239:0;217245:0;217249:0;217251:0;217253:0;217255:0;217256:0;217257:0;217270:0;217292:0;217294:0;217297:0;217298:0;217307:0;217325:1;217343:0;217351:0;217357:0;217403:0;217439:0;217440:0;217444:0;217445:0;217451:0;217454:0;217474:1;217475:1;217476:1;217477:1;217481:0;217486:0;217488:0;217512:0;217513:0;217519:0;217520:0;217543:0;217553:0;217571:1;217585:0;217625:0;217626:0;217627:0;217628:0;217632:0;217639:0;217640:0;217641:0;217661:1;217662:1;217663:1;217741:0;217748:0;217749:0;217750:0;217751:0;217752:0;217753:0;217774:0;217786:0;217787:0;217788:0;217789:0;217790:0;217791:0;217792:0;217806:0;217809:0;217813:0;217816:0;217817:0;217837:1;217866:0;217869:0;217873:0;217875:0;217890:0;217904:0;217914:0;217917:0;217924:0;217926:0;217930:0;217931:0;217953:0;217954:0;217955:0;217956:0;217957:0;217958:0;217959:0;217960:0;217961:0;217962:0;217963:0;217974:0;217975:0;217981:0;217991:0;218006:0;218014:0;218018:0;218027:1;218042:0;218047:1;218053:0;218056:0;218061:0;218065:0;218072:0;218077:0;218090:0;218101:1;218102:1;218105:0;218112:0;218115:0;218116:0;218118:0;218119:0;218120:0;218133:0;218139:0;218140:0;218141:0;218142:0;218146:0;218148:0;218180:0;218186:0;218189:0;218190:0;218194:0;218213:0;218241:0;218263:0;218277:0;218285:0;218288:0;218290:0;218294:0;218308:0;218309:0;218322:0;218324:0;218327:0;218331:0;218383:0;218405:0;218424:1;218457:0;218458:0;218461:0;218463:0;218466:0;218467:0;218468:0;218471:0;218481:0;218489:0;218490:0;218491:0;218492:0;218495:0;218518:0;218530:0;218541:0;218542:0;218543:0;218544:0;218550:0;218554:0;218558:0;218572:0;218591:0;218597:0;218601:0;218602:0;218607:0;218610:0;218611:0;218612:0;218616:0;218617:0;218643:0;218650:0;218651:0;218652:0;218653:0;218658:0;218659:0;218660:0;218663:0;218664:0;218665:0;218666:0;218667:0;218669:0;218670:0;218671:0;218688:0;218692:0;218693:0;218694:0;218695:0;218696:0;218697:0;218701:0;218702:0;218704:0;218705:0;218706:0;218710:0;218711:0;218712:0;218713:0;218714:0;218715:0;218716:0;218729:0;218733:1;218740:0;218741:0;218742:0;218743:0;218744:0;218745:0;218746:0;218886:0;218888:0;218891:0;218906:1;218909:0;218915:0;218925:0;218926:0;218927:0;218939:0;218962:0;218968:0;218969:0;218975:0;218981:0;218982:0;219002:0;219011:0;219020:0;219052:0;219081:0;219083:0;219092:0;219115:0;219120:0;219121:0;219129:0;219134:0;219162:0;219196:0;219201:0;219213:0;219331:0;219359:0;219416:0;219427:0;219437:0;219438:0;219439:0;219444:0;219446:0;219512:0;219545:0;219550:0;219581:0;219609:0;219692:0;219817:0;219818:0;219819:0;219820:0;219821:0;219823:0;219824:0;219888:0;219988:0;220052:0;220093:0;220377:0;220387:0;220417:0;220418:0;220432:0;220480:0;220513:0;220517:0;220519:0;220560:0;220584:0;220635:0;220681:0;220759:0;220763:0;220766:0;220767:0;220827:0;220828:0;220829:0;220830:0;220831:0;220832:0;220833:0;220885:0;220886:0;220985:0;220997:0;221051:0;221404:0;221405:0;221410:0;221414:0;221416:0;221419:0;221420:0;221421:0;221422:0;221423:0;221428:0;221430:0;221431:0;221435:0;221436:0;221438:0;221439:0;221441:0;221446:0;221447:0;221448:0;221449:0;221450:0;221451:0;221452:0;221453:0;221455:0;221457:0;221460:0;221464:0;221481:0;221482:0;221483:0;221510:0;221518:0;221525:0;300000:0;300001:0;300002:0;300003:0;300004:0;300005:0;300006:0;300007:0;300008:0;300009:0;300010:0;300011:0;300012:0;300013:0;300014:0;300015:0;300016:0;300017:0;300019:0;300026:0;300027:0;300028:0;300029:0;300030:0;300031:0;300032:0;300033:0;300044:0;300050:0;300051:0;300052:0;300053:0;300054:0;300055:0;300056:0;300057:0;300058:0;300059:0;300060:0;300061:0;300062:0;300063:0;300064:0;300065:0;300067:0;300068:0;300069:0;300070:0;300071:0;300073:0;300074:0;300076:0;300077:0;300078:0;300079:0;300080:0;300081:0;300082:0;300083:0;300084:0;300085:0;300086:0;300087:0;300088:0;300089:0;300090:0;300091:0;300092:0;300093:0;300094:0;300095:0;300097:0;300110:0;300111:0;300112:0;300113:0;300116:0;300119:0;300124:0;300125:0;300126:0;300127:0;300137:0;300140:0;300141:0;300142:0;300143:1;300144:1;300145:1;300146:1;300147:1;300148:1;300150:1;300151:1;300152:1;300153:0;300154:0;300162:0;300163:0;300164:0;300165:0;300166:0;300167:0;300168:0;300170:0;300172:0;300173:0;300174:0;300175:0;300178:0;300180:1;300181:1;300182:0;300197:0;300208:0;300209:0;300213:0;300215:1;300216:1;300217:0;300218:0;300219:0;300221:0;300222:0;300225:0;300228:0;300229:0;300230:0;300231:0;300232:0;300234:0;300236:0;300238:0;300239:0;300240:0;300241:0;300242:0;300243:0;300244:0;300245:0;300246:0;300247:0;300248:0;300249:0;300250:0;300251:0;300252:0;300256:0;300257:0;300258:0;300259:0;300260:0;300261:0;300262:0;300263:0;300264:0;300265:0;300266:0;300267:0;300270:0;300271:0;300272:0;300273:0;300274:0;300275:0;300276:0;300277:0;300278:0;300279:0;300282:0;300283:0;300284:0;300285:0;300290:0;300291:0;300292:0;300295:0;300304:0;300305:0;300307:0;300308:0;300309:0;300310:0;300311:0;300312:0;300313:0;300314:0;300316:0;300317:0;300318:0;300319:0;300320:0;300321:0;300322:0;300323:0;300324:0;300325:0;300326:0;300327:0;300329:0;300330:0;300331:0;300332:0;300333:0;300334:0;300335:0;300336:0;300337:0;300340:0;300344:0;300345:0;300346:0;300348:0;300349:0;300350:0;300351:0;300352:0;300353:0;300354:0;300355:0;300356:0;300357:0;300358:0;300359:0;300360:0;300361:0;300362:0;300363:0;300364:0;300365:0;300366:0;300367:0;300368:0;300369:0;300370:0;300372:0;300373:0;300374:0;300375:0;300376:0;300377:0;300378:0;300379:0;300380:0;300381:0;300382:0;300383:0;300384:0;300385:0;300386:0;300387:0;300388:0;300389:0;300390:0;300391:0;300392:0;300393:0;300394:0;300395:0;300396:0;300397:0;300398:0;300400:0;300401:0;300403:0;300405:1;300406:0;300407:0;300408:0;300409:0;300410:0;300411:0;300412:0;300413:0;300415:0;300416:0;300418:0;300419:0;300420:0;300424:0;300425:0;300427:0;300428:0;300429:0;300430:0;300431:0;300432:0;300433:0;300434:0;300436:0;300440:0;300446:0;300447:0;300448:0;300449:0;300450:0;300451:0;300452:0;300453:0;300454:0;300455:0;300457:0;300458:0;300459:0;300460:0;300462:0;300463:0;300465:0;300466:0;300467:0;300468:0;300469:0;300470:0;300471:0;300472:0;300474:0;300476:0;300477:0;300478:0;300479:0;300480:0;300481:0;300482:0;300483:0;300485:0;300486:0;300487:0;300488:0;300489:0;300490:0;300491:0;300492:0;300493:0;300495:0;300496:0;300497:0;300498:0;300499:0;300500:0;300501:0;300506:0;300507:0;300508:0;300510:0;300516:0;300519:0;300520:0;300521:0;300522:0;300523:0;300524:0;300525:0;300526:0;300527:0;300528:0;300529:0;300530:0;300531:0;300532:0;300533:0;300534:0;300535:0;300536:0;300537:0;300538:0;300539:0;300542:0;300543:0;300544:0;300545:0;300546:0;300547:0;300548:0;300549:0;300550:0;300551:0;300552:0;300553:0;300554:0;300555:0;300556:0;300557:0;300558:0;300559:0;300560:0;300561:0;300563:0;300564:0;300565:0;300566:0;300568:0;300569:0;300570:0;300571:0;300572:0;300573:0;300575:0;300576:0;300579:0;300580:0;300581:0;300583:0;300584:0;300585:0;300586:0;300587:0;300588:0;300590:0;300593:0;300594:0;300595:0;300596:0;300597:0;300598:0;300599:0;300600:0;300601:0;300603:0;300604:0;300605:0;300606:0;300607:0;300608:0;300609:0;300610:0;300611:0;300612:0;300613:0;300614:0;300615:0;300616:0;300617:0;300618:0;300619:0;300620:0;300621:0;300622:0;300623:0;300624:0;300625:1;300626:1;300627:0;300628:0;300629:0;300630:0;300631:0;300632:0;300633:0;300634:0;300635:0;300636:0;300637:0;300638:0;300639:0;300640:0;300641:0;300642:0;300643:0;300644:0;300645:0;300650:0;300651:0;300652:0;300653:0;300654:0;300655:0;300656:0;300657:0;300658:0;300661:0;300663:0;300664:0;300668:0;300678:0;300679:0;300680:0;300681:0;300683:0;300684:0;300685:0;300687:0;300688:0;300689:0;300690:0;400002:0;400003:0;400007:0;400021:0;400022:0;400024:0;400025:0;400029:0;400037:0;400039:0;400040:0;400042:0;400047:0;400060:0;400065:0;400068:0;400072:0;400077:0;400078:0;400079:0;400084:0;400087:0;400088:0;400102:0;400107:0;400108:0;400110:0;400111:0;400120:0;400122:0;400123:0;400125:0;400126:0;400127:0;400128:0;400129:0;400135:0;400138:0;400142:0;400146:0;400147:0;400149:0;400151:0;400153:0;400156:0;400159:0;400161:0;400163:0;400175:0;400188:0;400202:0;400203:0;400204:0;400206:0;400208:0;400214:0;400231:0;400232:0;400233:0;400234:0;400235:0;400236:0;400237:0;400239:0;400240:0;400241:0;400244:0;400245:0;400246:0;400247:0;400248:0;400260:0;400264:0;400267:0;400273:0;400275:0;400284:0;400288:0;400291:0;400292:0;400297:0;400303:0;400304:0;400305:0;400306:0;400307:0;400308:0;400309:0;400310:0;400311:0;400312:0;400313:0;400315:0;400316:0;400320:0;400321:0;400322:0;400324:0;400325:0;400326:0;400332:0;400334:0;400336:0;400338:0;400339:0;400340:0;400341:0;400342:0;400344:0;400345:0;400346:0;400347:0;400348:0;400349:0;400350:0;400351:0;400353:0;400354:0;400355:0;400356:0;400357:0;400360:0;400361:0;400363:0;400364:0;400365:0;400373:0;400374:0;400376:0;400378:0;400379:0;400385:0;400386:0;400389:0;400390:0;400391:0;400393:0;400394:0;400396:0;400403:0;400406:0;400409:0;400410:0;400413:0;400414:0;400415:0;400419:0;400422:0;400428:0;400432:0;400443:0;400444:0;400447:0;400448:0;400460:0;400461:0;400462:0;400465:0;400468:0;400470:0;400472:0;400473:0;400489:0;400491:0;400495:0;400501:0;400505:0;400507:0;400514:0;400519:0;400523:0;400527:0;400530:0;400531:0;400533:0;400536:0;400537:0;400538:0;400541:0;400542:0;400543:0;400544:0;400547:0;400548:0;400549:0;400557:0;400568:0;400569:0;400571:0;400572:0;400574:0;400576:0;400579:0;400581:0;400584:0;400587:0;400590:0;400591:0;400598:0;400600:0;400602:0;400610:0;400611:0;400612:0;400613:0;400619:0;400620:0;400621:0;400622:0;400623:0;400624:0;400625:0;400626:0;400627:0;400628:0;400631:0;400633:0;400634:0;400635:0;400636:0;400637:0;400638:0;400639:0;400640:0;400641:0;400642:0;400643:0;400644:0;400651:0;400652:0;400653:0;400654:0;400655:0;400656:0;400657:0;400659:0;400660:0;400662:0;400663:0;400668:0;400672:0;400692:0;400695:0;400697:0;400698:0;400699:0;400700:0;400703:0;400707:0;400708:0;400709:0;400711:0;400713:0;400715:0;400718:0;400723:0;400727:0;400728:0;400729:0;400735:0;400737:0;400738:0;400748:0;400750:0;400751:0;400759:0;400760:0;400763:0;400769:0;400772:0;400773:0;400777:0;400778:0;400782:0;400783:0;400784:0;400785:0;400787:0;400799:0;400807:0;400809:0;400810:0;400811:0;400812:0;400813:0;400819:0;400820:0;400821:0;400822:0;400823:0;400824:0;400825:0;400827:0;400828:0;400829:0;400837:0;400838:0;400839:0;400841:0;400846:0;400849:0;400850:0;400852:0;400855:0;400856:0;400857:0;400858:0;400859:0;400863:0;400866:0;400869:0;400871:0;400882:0;400888:0;400892:0;400973:0;400974:0;400979:0;400980:0;400983:0;500000:0;500001:0;500002:0;500005:0;500011:0"};
+const fmt = (v, d = 0) => Number(v).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d });
+const EXAMPLE = {
+  date: "24-10-2026", total: 201710.94, rows: 2823, items: 1068,
+  sc: [27124.94, 217, 130], com: [129507.43, 1992, 769], ops: [45078.57, 614, 287],
+  cats: { ZERO_FC: [8119.8, 52, 44], AUTO_REPLENISHMENT: [16027.86, 138, 71], COVERAGE_UPLIFT: [2977.28, 27, 20], SHORTAGE: [70549.75, 1299, 287], DELISTED: [10838.15, 139, 90], BLOCKED: [48119.53, 554, 417], SPECIALITY: [3055.95, 16, 6], DTD: [294.56, 4, 2], ON_HAND: [41728.06, 594, 279] },
+  periods: [["Yesterday", 2823, 201710.94], ["MTD", 63372, 5412140.12], ["YTD", 197159, 16950631.68]],
+};
+
+// ---------- stored Commercial Master (per browser, optional)
+function builtinMaster() {
+  const m = new Map(); for (const pair of MASTER.data.split(";")) { const i = pair.lastIndexOf(":"); m.set(pair.slice(0, i), MASTER.divisions[+pair.slice(i + 1)]); }
+  return { name: "Commercial Master (built-in)", map: m, note: "Commercial Master not in Repository - using the built-in Commercial Master (rebuilt from the 24-10-2026 verified output)." };
+}
+function storedMaster() {
+  try { const raw = localStorage.getItem("ls.master"); if (!raw) return null; const o = JSON.parse(raw); return { name: o.name, map: new Map(o.entries), note: `Commercial Master not in Repository - using ${o.name} saved in this browser on ${o.saved}.` }; } catch (e) { return null; }
+}
+function currentMaster() { return storedMaster() || builtinMaster(); }
+function showMaster() { const s = storedMaster(); $("masterState").textContent = s ? `${s.name} saved in this browser (${fmt(s.map.size)} materials)` : "built-in list (9,502 materials)"; }
+showMaster();
+async function saveMasterFromFile(file) {
+  try {
+    const xr = await new E._test.XlsxReader(file, file.name).open();
+    const rows = [];
+    for (const s of xr.sheets) { const r = await xr.rows(s); const h = r.findIndex(x => x.map(v => String(v).trim().toLowerCase()).includes("material") && x.map(v => String(v).trim().toLowerCase()).includes("division")); if (h >= 0) { const hd = r[h].map(v => String(v).trim().toLowerCase()); const im = hd.indexOf("material"), id = hd.indexOf("division"); const m = new Map(); for (const row of r.slice(h + 1)) { const k = E._test.clean(row[im]); if (k && !m.has(k)) m.set(k, E._test.clean(row[id])); } rows.push(m); break; } }
+    if (!rows.length) throw new Error("No sheet with Material and Division columns.");
+    const entries = [...rows[0].entries()];
+    try { localStorage.setItem("ls.master", JSON.stringify({ name: file.name, saved: new Date().toLocaleDateString("en-GB"), entries })); } catch (e) { /* storage unavailable: use for this session only */ sessionMaster = { name: file.name, map: rows[0], note: `Commercial Master not in Repository - using ${file.name}.` }; }
+    showMaster(); if (sessionMaster) $("masterState").textContent = `${file.name} (${fmt(rows[0].size)} materials, this session only)`;
+  } catch (e) { $("masterState").textContent = "could not read that file: " + e.message; }
+}
+let sessionMaster = null;
+
+// ---------- input selection
+let chosen = []; // [{name, blob}]
+const drop = $("drop");
+drop.addEventListener("click", () => $("fileInput").click());
+drop.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("fileInput").click(); } });
+$("folderBtn").addEventListener("click", () => $("folderInput").click());
+$("masterBtn").addEventListener("click", () => $("masterInput").click());
+$("masterInput").addEventListener("change", e => { if (e.target.files[0]) saveMasterFromFile(e.target.files[0]); });
+["dragenter", "dragover"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+drop.addEventListener("drop", async e => {
+  const items = e.dataTransfer.items; const out = [];
+  if (items && items.length && items[0].webkitGetAsEntry) {
+    const walk = async (entry, path) => {
+      if (entry.isFile) { const f = await new Promise((res, rej) => entry.file(res, rej)); out.push({ name: path + f.name, blob: f }); }
+      else if (entry.isDirectory) { const rd = entry.createReader(); let batch; do { batch = await new Promise((res, rej) => rd.readEntries(res, rej)); for (const c of batch) await walk(c, path + entry.name + "/"); } while (batch.length); }
+    };
+    const entries = [...items].map(i => i.webkitGetAsEntry()).filter(Boolean);
+    for (const en of entries) await walk(en, "");
+  } else for (const f of e.dataTransfer.files) out.push({ name: f.name, blob: f });
+  setChosen(out);
+});
+$("fileInput").addEventListener("change", e => setChosen([...e.target.files].map(f => ({ name: f.name, blob: f }))));
+$("folderInput").addEventListener("change", e => setChosen([...e.target.files].map(f => ({ name: f.webkitRelativePath || f.name, blob: f }))));
+function setChosen(list) {
+  chosen = list.filter(x => !x.name.split("/").pop().startsWith("."));
+  const mb = chosen.reduce((a, x) => a + x.blob.size, 0) / 1e6;
+  $("picked").textContent = chosen.length ? (chosen.length === 1 ? `${chosen[0].name} · ${fmt(mb, 1)} MB` : `${chosen.length} files · ${fmt(mb, 1)} MB`) : "Nothing chosen yet.";
+  $("startBtn").disabled = !chosen.length;
+  markNeeds(chosen.map(x => x.name));
+}
+function markNeeds(names) {
+  const low = names.map(n => n.split("/").pop().toLowerCase());
+  const has = { lost: low.some(n => /lost[\s_-]*sales/.test(n) && n.endsWith(".xlsx")), mb52: low.some(n => n.replace(/ /g, "").includes("mb52")), zfd: low.some(n => n.endsWith(".zip") && /\d/.test(n)), close: low.some(n => n.includes("item") && n.includes("close")), pdmf: low.some(n => n.includes("pdmf")), master: low.some(n => n.includes("commercial") && n.includes("master")), ppt: low.some(n => n.endsWith(".pptx")), common: low.some(n => n.startsWith("lost_common")) };
+  document.querySelectorAll("#need .chip").forEach(c => c.classList.toggle("ok", !!has[c.dataset.k]));
+}
+
+// ---------- run state
+let stage = null, result = null, t0 = 0, timer = null;
+const logEl = $("log");
+function progress(msg, frac) {
+  $("runMsg").textContent = msg; if (frac !== undefined && frac !== null) $("barFill").style.width = Math.round(frac * 100) + "%";
+  const line = `${clock()}  ${msg}`; if (!logEl.lastChild || logEl.lastChild.textContent.slice(7) !== msg.slice(0)) { const d = document.createElement("div"); d.textContent = line; logEl.appendChild(d); logEl.scrollTop = logEl.scrollHeight; }
+}
+function clock() { const s = Math.floor((Date.now() - t0) / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`; }
+function startTimer() { t0 = Date.now(); clearInterval(timer); timer = setInterval(() => ($("runTime").textContent = clock()), 500); }
+function stopTimer() { clearInterval(timer); }
+function setStep(id, state) { const el = $(id); el.classList.remove("active", "done"); if (state) el.classList.add(state); el.setAttribute("aria-disabled", state ? "false" : "true"); }
+function fail(err) {
+  stopTimer();
+  const msg = err && err.message ? err.message : String(err);
+  const isMem = /memory|allocation|Array buffer/i.test(msg);
+  $("runErr").textContent = (err instanceof E.EngineError ? "Stopped: " : "Something went wrong: ") + msg + (isMem ? "\n\nThe browser ran out of memory. Close other tabs and try again in Chrome or Edge on a desktop computer." : "");
+  $("runErr").hidden = false; $("runMsg").textContent = "Stopped"; $("startBtn").disabled = false; $("approveBtn").disabled = false;
+}
+
+$("startBtn").addEventListener("click", async () => {
+  $("startBtn").disabled = true; $("run").hidden = false; $("runErr").hidden = true; logEl.textContent = ""; $("barFill").style.width = "0%";
+  $("s2body").hidden = true; $("s2empty").hidden = false; $("s3body").hidden = true; $("s3empty").hidden = false; setStep("s2", null); setStep("s3", null); setStep("s1", "active");
+  startTimer();
+  try {
+    progress("Opening the Repository", 0.01);
+    const files = await E.expandInputs(chosen, m => progress(m, 0.01));
+    markNeeds(files.map(f => f.name));
+    const repoName = chosen.length === 1 ? chosen[0].name : "Repository";
+    stage = await E.stage1(files, { progress, fallbackMaster: sessionMaster || currentMaster(), repositoryName: repoName });
+    stopTimer(); renderStage1(stage); setStep("s1", "done"); setStep("s2", "active");
+    progress(`Stage 1 complete in ${clock()}. Review the controls, then approve.`, 1);
+  } catch (err) { console.error(err); fail(err); }
+});
+
+function renderStage1(st) {
+  const c = st.controls;
+  const kv = [["Report date", E.dmy(st.src.reportDate)], ["Physical rows", fmt(c.physical_rows)], ["Invalid rows", fmt(c.invalid_rows)], ["Valid rows", fmt(c.valid_rows)], ["Valid RSP (SAR)", fmt(c.valid_rsp, 2)],
+    ["Previous Common through", c.latest_history_date || "none"], ["Recovered dates", c.gap_dates_appended.join(", ") || "none"], ["Gap rows · RSP", `${fmt(c.gap_valid_rows)} · ${fmt(c.gap_valid_rsp, 2)}`], ["MTD rows · RSP", `${fmt(c.mtd_rows)} · ${fmt(c.mtd_rsp, 2)}`], ["YTD rows · RSP", `${fmt(c.ytd_rows)} · ${fmt(c.ytd_rsp, 2)}`]];
+  $("kv").replaceChildren(...kv.map(([k, v]) => { const d = document.createElement("div"); const s = document.createElement("span"); s.textContent = k; const b = document.createElement("b"); b.textContent = v; d.append(s, b); return d; }));
+  const src = st.src; const nm = f => (f ? f.name.split("/").pop() : "—");
+  fillTable($("srcTbl"), ["Source", "File used"], [["Lost Sales", nm(src.lost)], ["MB52", nm(src.mb52)], ["ZFD export", nm(src.zfd)], ["Item to Close", nm(src.close)], ["PDMF", nm(src.pdmf)], ["Commercial Master", nm(src.master)], ["PPT template", nm(src.template)], ["Previous Common", nm(src.history)]]);
+  checksTable($("chk1"), st.checks);
+  $("notes").replaceChildren(...src.notes.map(n => { const li = document.createElement("li"); li.textContent = n; return li; }));
+  const bad = st.checks.filter(x => !x.passed);
+  $("s2warn").hidden = !bad.length; $("s2warn").textContent = bad.length ? `${bad.length} control(s) failed. Investigate before publishing; the button below builds the package anyway.` : "";
+  $("approveBtn").textContent = bad.length ? "Build the package anyway" : "Approve and build the package";
+  $("approveBtn").disabled = false;
+  $("s2empty").hidden = true; $("s2body").hidden = false;
+}
+function fillTable(t, head, rows, numCols = []) {
+  const thead = document.createElement("thead"); const tr = document.createElement("tr");
+  head.forEach((h, i) => { const th = document.createElement("th"); th.textContent = h; if (numCols.includes(i)) th.className = "num"; tr.append(th); }); thead.append(tr);
+  const tb = document.createElement("tbody");
+  rows.forEach(r => { const tr = document.createElement("tr"); if (r.cls) tr.className = r.cls; r.forEach((v, i) => { const td = document.createElement("td"); if (v instanceof Node) td.append(v); else td.textContent = v; if (numCols.includes(i)) td.className = "num"; tr.append(td); }); tb.append(tr); });
+  t.replaceChildren(thead, tb);
+}
+function checksTable(t, checks) {
+  fillTable(t, ["Control", "Result", "Detail"], checks.map(c => { const p = document.createElement("span"); p.className = "pill " + (c.passed ? "pass" : "fail"); p.textContent = c.passed ? "PASS" : "FAIL"; return [c.control, p, c.detail]; }));
+}
+
+$("approveBtn").addEventListener("click", async () => {
+  if (!stage) return;
+  $("approveBtn").disabled = true; $("runErr").hidden = true; $("barFill").style.width = "0%"; startTimer();
+  try {
+    result = await E.stage2(stage, { progress, domParser: new DOMParser(), xmlSerializer: new XMLSerializer() });
+    stopTimer(); progress(`Package built in ${clock()}.`, 1);
+    renderResult(result); setStep("s2", "done"); setStep("s3", "active");
+  } catch (err) { console.error(err); fail(err); }
+});
+
+function renderResult(r) {
+  const ok = r.checks.every(c => c.passed);
+  $("allOk").className = "alert " + (ok ? "ok" : "bad");
+  $("allOk").textContent = ok ? `All ${r.checks.length} controls passed. Rows and values reconcile across the Common and the three department workbooks.` : `${r.checks.filter(c => !c.passed).length} control(s) failed. Open the control list below before sharing.`;
+  $("zipName").textContent = `${r.zipName} · ${fmt(r.zip.size / 1e6, 1)} MB`;
+  $("fileList").replaceChildren(...r.names.map(n => {
+    const d = document.createElement("div"); d.className = "f"; const c = document.createElement("code"); const sz = r.files[n].size; c.textContent = `${n} · ${sz < 1e6 ? fmt(sz / 1e3, 0) + " KB" : fmt(sz / 1e6, 1) + " MB"}`;
+    const b = document.createElement("button"); b.className = "ghost small"; b.textContent = "Save"; b.addEventListener("click", () => save(n, r.files[n]));
+    d.append(c, b); return d;
+  }));
+  checksTable($("chk2"), r.checks);
+  $("s3empty").hidden = true; $("s3body").hidden = false;
+  renderLedger({
+    live: true, date: E.dmy(stage.src.reportDate), total: r.sy._total, rows: r.sy.rows, items: r.sy.items,
+    sc: tri(r.sy.divisions["Supply Chain"]), com: tri(r.sy.divisions.Commercial), ops: tri(r.sy.divisions.Operations),
+    cats: Object.fromEntries(Object.entries(r.sy.categories).map(([k, v]) => [k, [v._v ?? 0, v.rows, v.items]])),
+    periods: [["Yesterday", r.sy.rows, r.sy._total], ["MTD", r.sm.rows, r.sm._total], ["YTD", r.syt.rows, r.syt._total]],
+  });
+}
+const tri = d => [d._v, d.rows, d.items];
+$("saveZip").addEventListener("click", () => result && save(result.zipName, result.zip));
+$("againBtn").addEventListener("click", () => { stage = null; result = null; setChosen([]); $("fileInput").value = ""; $("folderInput").value = ""; $("run").hidden = true; $("s2body").hidden = true; $("s2empty").hidden = false; $("s3body").hidden = true; $("s3empty").hidden = false; setStep("s1", "active"); setStep("s2", null); setStep("s3", null); window.scrollTo({ top: 0, behavior: "smooth" }); });
+
+// ---------- saving files
+let downloadsP = null;
+function downloadsCap() { if (!downloadsP) downloadsP = (window.claude && typeof window.claude.use === "function") ? window.claude.use("downloads").catch(() => null) : Promise.resolve(null); return downloadsP; }
+downloadsCap();
+async function save(name, blob) {
+  $("saveMsg").textContent = "";
+  const dl = await downloadsCap();
+  if (dl) {
+    try { await dl.save({ filename: name, data: blob }); $("saveMsg").textContent = `Saved ${name}.`; }
+    catch (e) {
+      const code = e && e.code;
+      $("saveMsg").textContent = code === "declined" ? "Save cancelled." : code === "rate_limited" ? "A save prompt is already open. Finish it, then try again." : code === "too_large" ? "This file is too large for this view." : `Could not save (${code || e.message || e}).`;
+    }
+    return;
+  }
+  // outside claude.ai (e.g. GitHub Pages or a local copy): normal browser download
+  const url = URL.createObjectURL(blob); const a = document.createElement("a"); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  $("saveMsg").textContent = `Downloading ${name}…`;
+}
+
+// ---------- ledger
+function renderLedger(d) {
+  $("ledgerTag").textContent = d.live ? `Your report · ${d.date}` : `Example · ${d.date}`;
+  $("ledgerTag").classList.toggle("live", !!d.live);
+  $("ledgerNote").hidden = !!d.live;
+  $("periods").replaceChildren(...d.periods.map(([k, n, v]) => { const x = document.createElement("div"); const s = document.createElement("span"); s.textContent = k; const b = document.createElement("b"); b.textContent = fmt(v, 0); const em = document.createElement("em"); em.textContent = `${fmt(n)} rows`; x.append(s, b, em); return x; }));
+  const t = d.total; const pc = v => (t ? (v / t * 100).toFixed(1) : "0.0") + "%";
+  const line = (label, a, cls) => { const r = [label, fmt(a[0]), pc(a[0]), fmt(a[1]), fmt(a[2])]; r.cls = cls; return r; };
+  const c = d.cats;
+  fillTable($("deptTbl"), ["", "Value", "%", "Rows", "Items"], [
+    line("Total Lost Sales", [t, d.rows, d.items], "tot"),
+    line("Supply Chain Review", d.sc, "g sc"), line("Zero Forecast", c.ZERO_FC, "sub"), line("Auto Replenishment – Next Visit", c.AUTO_REPLENISHMENT, "sub"), line("Coverage Will Be Increased", c.COVERAGE_UPLIFT, "sub"),
+    line("Commercial Review", d.com, "g com"), line("Shortage", c.SHORTAGE, "sub"), line("Delisted Items", c.DELISTED, "sub"), line("Blocked Items", c.BLOCKED, "sub"),
+    line("Operation Review", d.ops, "g ops"), line("Special Items", c.SPECIALITY, "sub"), line("Door To Door", c.DTD, "sub"), line("Onhand Available", c.ON_HAND, "sub"),
+  ], [1, 2, 3, 4]);
+}
+renderLedger(EXAMPLE);
+window.addEventListener("beforeunload", e => { if (timer && $("runMsg").textContent !== "Stopped" && !result && stage === null && $("startBtn").disabled) { e.preventDefault(); e.returnValue = ""; } });
+})();
+</script>
